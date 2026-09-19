@@ -56,10 +56,27 @@ class ArCameraPreview @JvmOverloads constructor(
         fun onBoardVisibility(visible: Boolean)
 
         /**
-         * Board pose relative to the camera, recomputed from each image. Independent
-         * of ARCore's world tracking, so usable even when that has diverged.
+         * Board poses recomputed from each image, independent of ARCore's world
+         * tracking. [physicalTranslation]/[physicalQuaternion] retain the raw
+         * image-camera frame for the laptop protocol. [displayTranslation]/
+         * [displayQuaternion] use the display-oriented camera frame that matches
+         * [onCameraProjection], and must be used by the native renderer.
+         *
+         * [northAtNegativeY] is locked from the matched detection quad when the board
+         * is first tracked. It tells the native 3-D layer which long edge was visually
+         * higher on screen, so a model placed "north" of the outline cannot jump to
+         * the other side as the phone moves.
          */
-        fun onBoardPoseInCamera(translation: FloatArray, quaternion: FloatArray)
+        fun onBoardPoseInCamera(
+            physicalTranslation: FloatArray,
+            physicalQuaternion: FloatArray,
+            displayTranslation: FloatArray,
+            displayQuaternion: FloatArray,
+            northAtNegativeY: Boolean,
+        )
+
+        /** Projection matching ARCore's display-oriented camera background. */
+        fun onCameraProjection(projection: FloatArray)
 
         /** Non-null while ARCore cannot track, explaining what the user should change. */
         fun onTrackingHint(message: String?)
@@ -90,20 +107,27 @@ class ArCameraPreview @JvmOverloads constructor(
     private var lastRectangleTimestampNs = 0L
     private var lumaCopy = ByteArray(0)
     private var candidateImageCorners: List<FloatArray> = emptyList()
-    private var candidateStepPx: List<Int> = emptyList()
     private var trackedCentroid: PointF? = null
     private var solveAttemptsLeft = 0
     private var bestSolutionCameraPose: PlanarPoseSolver.Result? = null
+    private var bestPhysicalToDisplayCameraPose: Pose? = null
+    /** Camera-to-world pose captured with the source image for the current best solve. */
+    private var bestPhysicalCameraWorldPose: Pose? = null
     private var bestSolutionError = Float.MAX_VALUE
     private var boardTrackingActive = false
     private var smoothedBoardPose: PlanarPoseSolver.Result? = null
+    private val poseSmoother = PoseSmoother()
     private var lastOrderedCorners: FloatArray? = null
     private var lastFreshQuaternion: FloatArray? = null
     private var poseJumpStreak = 0
     private var lastSolveTimestampNs = 0L
     private var boardVisible = false
     private var centroidVelocity = PointF(0f, 0f)
-    private var detectionCameraPose: Pose? = null
+    /** Area of the last accepted image quad, used only to reject obvious fragments. */
+    private var lastTrackedAreaPx = 0f
+    private var detectionPhysicalToDisplayCameraPose: Pose? = null
+    /** Camera-to-world pose belonging to the asynchronously detected image. */
+    private var detectionPhysicalCameraWorldPose: Pose? = null
     private var detectionIntrinsicsFocal: FloatArray? = null
     private var detectionIntrinsicsPrincipal: FloatArray? = null
     private var lastPoseLogTimestampNs = 0L
@@ -111,6 +135,37 @@ class ArCameraPreview @JvmOverloads constructor(
     private var boardLengthMeters = 0f
     private var boardWidthMeters = 0f
     private var lastPublishedBoardPose: Pose? = null
+    /**
+     * A short-lived ARCore fallback for verified visual tracking. It is deliberately
+     * separate from the optional manual-calibration [boardAnchor], so it cannot
+     * overwrite the user's calibration or spam calibration protocol messages.
+     */
+    private var fallbackBoardAnchor: Anchor? = null
+    private var lastFallbackAnchorRefreshNs = 0L
+    private var lastFallbackPublishNs = 0L
+    /**
+     * The rectangle has no real-world compass direction.  This is deliberately a
+     * screen-relative convention: on first lock, "north" is the side above the
+     * outline on the phone display, and it remains fixed until reset.
+     */
+    private var northAtNegativeY: Boolean? = null
+
+    /**
+     * A pose solve before it is committed to the tracker.  Keeping this immutable is
+     * important: a rejected rectangle must not replace [lastOrderedCorners], because
+     * that history is what prevents the board pose from flipping end-for-end.
+     */
+    private data class CandidateSolve(
+        val index: Int,
+        val orderedCorners: FloatArray,
+        val result: PlanarPoseSolver.Result,
+        val physicalToDisplayCamera: Pose,
+        val physicalCameraWorld: Pose,
+        val reprojectionErrorPx: Float,
+        val centroid: PointF,
+        val areaPx: Float,
+        val cornerContinuityPx: Float,
+    )
 
     init {
         setEGLContextClientVersion(2)
@@ -174,16 +229,26 @@ class ArCameraPreview @JvmOverloads constructor(
             trackedCentroid = null
             solveAttemptsLeft = 0
             bestSolutionCameraPose = null
+            bestPhysicalToDisplayCameraPose = null
+            bestPhysicalCameraWorldPose = null
             bestSolutionError = Float.MAX_VALUE
             boardTrackingActive = false
             smoothedBoardPose = null
             lastOrderedCorners = null
             lastFreshQuaternion = null
             centroidVelocity = PointF(0f, 0f)
+            lastTrackedAreaPx = 0f
             poseJumpStreak = 0
             lastPublishedBoardPose = null
+            northAtNegativeY = null
+            detectionPhysicalToDisplayCameraPose = null
+            detectionPhysicalCameraWorldPose = null
             boardAnchor?.detach()
             boardAnchor = null
+            fallbackBoardAnchor?.detach()
+            fallbackBoardAnchor = null
+            lastFallbackAnchorRefreshNs = 0L
+            lastFallbackPublishNs = 0L
         }
     }
 
@@ -199,13 +264,23 @@ class ArCameraPreview @JvmOverloads constructor(
             trackedCentroid = centroidOf(corners)
             solveAttemptsLeft = SOLVE_ATTEMPTS
             bestSolutionCameraPose = null
+            bestPhysicalToDisplayCameraPose = null
+            bestPhysicalCameraWorldPose = null
             bestSolutionError = Float.MAX_VALUE
             boardTrackingActive = false
             smoothedBoardPose = null
             lastOrderedCorners = null
             lastFreshQuaternion = null
             centroidVelocity = PointF(0f, 0f)
+            lastTrackedAreaPx = 0f
             poseJumpStreak = 0
+            northAtNegativeY = null
+            detectionPhysicalToDisplayCameraPose = null
+            detectionPhysicalCameraWorldPose = null
+            fallbackBoardAnchor?.detach()
+            fallbackBoardAnchor = null
+            lastFallbackAnchorRefreshNs = 0L
+            lastFallbackPublishNs = 0L
             // Detection deliberately keeps running: a single pass gives a noisy aspect
             // ratio, so we solve on several and keep the best fit.
             rectangleDetectionActive = true
@@ -266,17 +341,25 @@ class ArCameraPreview @JvmOverloads constructor(
             }
             if (isTracking) refreshAnchoredBoard()
 
-            // Withdraw the outline once solves stop arriving. A short grace period rides
-            // out the odd dropped pass; beyond that, drawing the last pose would assert a
-            // position we no longer have evidence for.
-            if (boardTrackingActive &&
-                boardVisible &&
-                frame.timestamp - lastSolveTimestampNs > BOARD_LOST_GRACE_NS
-            ) {
-                boardVisible = false
-                post {
-                    listener?.onBoardOutline(emptyList())
-                    listener?.onBoardVisibility(false)
+            // Image solves remain the primary source of truth. If the white board's
+            // outline is momentarily fragmented at an oblique view, switch promptly
+            // to the trusted ARCore anchor made from the last visual solve. If ARCore
+            // cannot track the anchor either, hide only after the usual grace period
+            // rather than leaving an unverified pose on screen.
+            val timeSinceVisualSolve = frame.timestamp - lastSolveTimestampNs
+            if (boardTrackingActive && timeSinceVisualSolve > ANCHOR_FALLBACK_START_NS) {
+                val anchorPublished = isTracking && publishBoardAnchorFallback(camera, frame.timestamp)
+                if (anchorPublished) {
+                    if (!boardVisible) {
+                        boardVisible = true
+                        post { listener?.onBoardVisibility(true) }
+                    }
+                } else if (boardVisible && timeSinceVisualSolve > BOARD_LOST_GRACE_NS) {
+                    boardVisible = false
+                    post {
+                        listener?.onBoardOutline(emptyList())
+                        listener?.onBoardVisibility(false)
+                    }
                 }
             }
 
@@ -496,9 +579,14 @@ class ArCameraPreview @JvmOverloads constructor(
         }
         if (bestIndex < 0 || bestDistance > CANDIDATE_MATCH_RADIUS_PX) return
 
-        trackedCentroid = centroidOf(candidateImageCorners[bestIndex])
         solveAttemptsLeft--
-        solveOnce(bestIndex)
+        val solved = solveCandidate(bestIndex)
+        if (solved != null) {
+            trackedCentroid = solved.centroid
+            if (solved.reprojectionErrorPx < bestSolutionError) {
+                commitInitialSolve(solved)
+            }
+        }
 
         if (solveAttemptsLeft <= 0) finishBoardSolve()
     }
@@ -517,31 +605,13 @@ class ArCameraPreview @JvmOverloads constructor(
             centroid.x + centroidVelocity.x,
             centroid.y + centroidVelocity.y,
         )
-        var bestIndex = -1
-        var bestDistance = Float.MAX_VALUE
-        candidateImageCorners.forEachIndexed { index, corners ->
-            val c = centroidOf(corners)
-            val distance = hypot(c.x - predicted.x, c.y - predicted.y)
-            if (distance < bestDistance) {
-                bestDistance = distance
-                bestIndex = index
-            }
-        }
-        // Lost sight of it: keep the last good pose rather than snapping to something
-        // else on screen, and let the outline go stale until the board is back.
-        // A generous radius while tracking: at roughly 8 solves per second even a
-        // moderate hand movement shifts the board well over a hundred image pixels
-        // between passes, and a tight radius reads to the user as "it stopped tracking".
-        if (bestIndex < 0 || bestDistance > TRACK_MATCH_RADIUS_PX) return
-
-        bestSolutionError = Float.MAX_VALUE
-        solveOnce(bestIndex)
-        val fresh = bestSolutionCameraPose ?: return
         // Looser than at lock-on: blur costs corner precision, and a slightly worse fit
         // on a board we are already tracking beats dropping the overlay entirely.
         val tolerance = maxOf(MIN_REPROJECTION_TOLERANCE_PX, REPROJECTION_STEPS * 2f) *
             TRACKING_TOLERANCE_FACTOR
-        if (bestSolutionError > tolerance) return
+        val selected = selectTrackingCandidate(predicted, tolerance) ?: return
+        val fresh = selected.result
+        val physicalToDisplayCamera = selected.physicalToDisplayCamera
 
         // A nearly head-on planar target is poorly conditioned in tilt: two mirrored
         // poses reproject almost identically, so noise can flip between them. Ignore a
@@ -562,7 +632,13 @@ class ArCameraPreview @JvmOverloads constructor(
         }
         poseJumpStreak = 0
 
-        val matched = centroidOf(candidateImageCorners[bestIndex])
+        // Commit candidate history only after every quality guard accepts it. A bad
+        // luma fragment must never influence the correspondence chosen next frame.
+        lastOrderedCorners = selected.orderedCorners.copyOf()
+        lastTrackedAreaPx = selected.areaPx
+        refreshFallbackAnchorFromVisualSolve(selected)
+
+        val matched = selected.centroid
         centroidVelocity = PointF(
             centroidVelocity.x * (1f - VELOCITY_SMOOTHING) +
                 (matched.x - centroid.x) * VELOCITY_SMOOTHING,
@@ -576,15 +652,141 @@ class ArCameraPreview @JvmOverloads constructor(
             post { listener?.onBoardVisibility(true) }
         }
 
-        val smoothed = smoothBoardPose(fresh)
-        smoothedBoardPose = smoothed
-        publishTrackedOutline(smoothed)
-        post { listener?.onBoardPoseInCamera(smoothed.translation.copyOf(), smoothed.quaternion.copyOf()) }
+        // The detection quad is the direct visual evidence for the yellow outline.
+        // Keep the independently smoothed pose for the native model, but do not
+        // reproject that pose back into the outline: smoothing can make its edges lag
+        // several pixels behind the board that was actually detected this frame.
+        val matchedImageCorners = selected.orderedCorners
+        val smoothedPhysical = smoothBoardPose(fresh)
+        smoothedBoardPose = smoothedPhysical
+        val smoothedDisplay = CameraPoseFrames.boardInDisplayCamera(
+            smoothedPhysical,
+            physicalToDisplayCamera,
+        )
+        val north = publishMatchedCandidateOutline(matchedImageCorners) ?: return
+        post {
+            listener?.onBoardPoseInCamera(
+                smoothedPhysical.translation.copyOf(),
+                smoothedPhysical.quaternion.copyOf(),
+                smoothedDisplay.translation.copyOf(),
+                smoothedDisplay.quaternion.copyOf(),
+                north,
+            )
+        }
+    }
+
+    /**
+     * A tracked frame can contain several bright rectangles: the board, a rail, or
+     * even a patch of the background. Previously we solved only the nearest centroid,
+     * so one incorrect fragment could suppress a valid board candidate at an oblique
+     * angle. Evaluate every plausible candidate and choose the best calibrated pose.
+     */
+    private fun selectTrackingCandidate(
+        predictedCentroid: PointF,
+        tolerancePx: Float,
+    ): CandidateSolve? {
+        var selected: CandidateSolve? = null
+        var selectedDistance = Float.MAX_VALUE
+        var selectedAreaChange = Float.MAX_VALUE
+
+        candidateImageCorners.forEachIndexed { index, corners ->
+            val centroid = centroidOf(corners)
+            val distance = hypot(
+                centroid.x - predictedCentroid.x,
+                centroid.y - predictedCentroid.y,
+            )
+            // A generous radius while tracking: at roughly 30 solves per second even
+            // a moderate hand movement can shift the board substantially between
+            // source images.
+            if (distance > TRACK_MATCH_RADIUS_PX) return@forEachIndexed
+
+            val area = quadArea(corners)
+            // The full board's projected area changes smoothly from one 30 Hz frame
+            // to the next. This excludes an inner rail or carpet fragment without
+            // rejecting normal perspective changes as the phone tilts.
+            if (!hasPlausibleTrackingArea(area)) return@forEachIndexed
+
+            val solved = solveCandidate(index) ?: return@forEachIndexed
+            if (solved.reprojectionErrorPx > tolerancePx) return@forEachIndexed
+
+            val areaChange = trackingAreaChange(area)
+            val previous = selected
+            val shouldSelect = previous == null ||
+                isBetterTrackingCandidate(
+                    candidate = solved,
+                    candidateDistance = distance,
+                    candidateAreaChange = areaChange,
+                    current = previous,
+                    currentDistance = selectedDistance,
+                    currentAreaChange = selectedAreaChange,
+                )
+            if (shouldSelect) {
+                selected = solved
+                selectedDistance = distance
+                selectedAreaChange = areaChange
+            }
+        }
+        return selected
+    }
+
+    /** Residual is primary; continuity breaks near-equal residual ties safely. */
+    private fun isBetterTrackingCandidate(
+        candidate: CandidateSolve,
+        candidateDistance: Float,
+        candidateAreaChange: Float,
+        current: CandidateSolve,
+        currentDistance: Float,
+        currentAreaChange: Float,
+    ): Boolean {
+        val residualDifference = candidate.reprojectionErrorPx - current.reprojectionErrorPx
+        if (abs(residualDifference) > RESIDUAL_TIE_PX) return residualDifference < 0f
+
+        val distanceDifference = candidateDistance - currentDistance
+        if (abs(distanceDifference) > CENTROID_TIE_PX) return distanceDifference < 0f
+
+        val areaDifference = candidateAreaChange - currentAreaChange
+        if (abs(areaDifference) > AREA_CHANGE_TIE) return areaDifference < 0f
+
+        // A final deterministic tie-break avoids candidate-list ordering flicker.
+        return candidate.cornerContinuityPx < current.cornerContinuityPx
+    }
+
+    private fun hasPlausibleTrackingArea(areaPx: Float): Boolean {
+        val previous = lastTrackedAreaPx
+        if (previous <= 0f || areaPx <= 0f) return true
+        val ratio = areaPx / previous
+        return ratio in MIN_TRACKING_AREA_RATIO..MAX_TRACKING_AREA_RATIO
+    }
+
+    private fun trackingAreaChange(areaPx: Float): Float {
+        val previous = lastTrackedAreaPx
+        if (previous <= 0f || areaPx <= 0f) return 0f
+        return abs(areaPx / previous - 1f)
+    }
+
+    private fun commitInitialSolve(solved: CandidateSolve) {
+        val longSide = sideLength(solved.orderedCorners, 0)
+        val shortSide = sideLength(solved.orderedCorners, 1)
+        val observedAspect = if (shortSide > 0f) longSide / shortSide else 0f
+        android.util.Log.d(
+            "ArSolve",
+            "index=${solved.index} aspect=$observedAspect modelAspect=${BOARD_LENGTH_M / BOARD_WIDTH_M} " +
+                "errorPx=${solved.reprojectionErrorPx} depthM=${solved.result.translation[2]}",
+        )
+        bestSolutionCameraPose = solved.result
+        bestPhysicalToDisplayCameraPose = solved.physicalToDisplayCamera
+        bestPhysicalCameraWorldPose = solved.physicalCameraWorld
+        bestSolutionError = solved.reprojectionErrorPx
+        lastOrderedCorners = solved.orderedCorners.copyOf()
     }
 
     private fun finishBoardSolve() {
         val tolerance = maxOf(MIN_REPROJECTION_TOLERANCE_PX, REPROJECTION_STEPS * 2f)
-        if (bestSolutionCameraPose == null || bestSolutionError > tolerance) {
+        if (bestSolutionCameraPose == null ||
+            bestPhysicalToDisplayCameraPose == null ||
+            bestPhysicalCameraWorldPose == null ||
+            bestSolutionError > tolerance
+        ) {
             trackedCentroid = null
             rectangleDetectionActive = false
             post { listener?.onCandidateRectangles(emptyList()) }
@@ -596,68 +798,219 @@ class ArCameraPreview @JvmOverloads constructor(
             return
         }
 
-        // Keep solving from here on. ARCore's world tracking diverges badly on this
-        // device, so an anchored pose would slide away; a pose recomputed from each
-        // image cannot drift because nothing is integrated over time.
+        // Image solves remain the primary tracker, because they cannot inherit
+        // ARCore world-map drift. The anchor below is retained only as a temporary
+        // 6-DoF fallback when an oblique frame loses the board's bright outline.
         boardTrackingActive = true
         smoothedBoardPose = bestSolutionCameraPose
         boardLengthMeters = BOARD_LENGTH_M
         boardWidthMeters = BOARD_WIDTH_M
+        lastTrackedAreaPx = lastOrderedCorners?.let(::quadArea) ?: 0f
+        createOrReplaceFallbackAnchor(
+            boardInPhysicalCamera = bestSolutionCameraPose,
+            physicalCameraInWorld = bestPhysicalCameraWorldPose,
+            timestampNs = latestFrame?.timestamp ?: 0L,
+        )
         post { listener?.onCandidateRectangles(emptyList()) }
         post { listener?.onBoardTracked(bestSolutionError) }
     }
 
     /**
-     * Blends a fresh solve into the running estimate. Each solve carries independent
-     * corner noise, so using them raw makes the outline twitch; smoothing trades a
-     * little lag for a stable overlay.
+     * Rebase the fallback anchor occasionally while visual tracking is healthy. This
+     * corrects slow ARCore world-map drift without making the native renderer depend
+     * on world tracking for its ordinary, image-verified frames.
      */
-    private fun smoothBoardPose(fresh: PlanarPoseSolver.Result): PlanarPoseSolver.Result {
-        val previous = smoothedBoardPose ?: return fresh
-        val blend = POSE_SMOOTHING
-        val translation = FloatArray(3) {
-            previous.translation[it] * (1f - blend) + fresh.translation[it] * blend
-        }
-
-        // Quaternions are a double cover of rotation, so align signs before blending
-        // or an equivalent rotation can average to something nonsensical.
-        var dot = 0f
-        for (i in 0 until 4) dot += previous.quaternion[i] * fresh.quaternion[i]
-        val sign = if (dot < 0f) -1f else 1f
-        val quaternion = FloatArray(4) {
-            previous.quaternion[it] * (1f - blend) + fresh.quaternion[it] * sign * blend
-        }
-        var magnitude = 0f
-        for (value in quaternion) magnitude += value * value
-        magnitude = kotlin.math.sqrt(magnitude)
-        if (magnitude < 1e-6f) return fresh
-        for (i in 0 until 4) quaternion[i] /= magnitude
-
-        return PlanarPoseSolver.Result(translation, quaternion)
+    private fun refreshFallbackAnchorFromVisualSolve(solved: CandidateSolve) {
+        val timestamp = latestFrame?.timestamp ?: return
+        if (timestamp - lastFallbackAnchorRefreshNs < FALLBACK_ANCHOR_REFRESH_NS) return
+        createOrReplaceFallbackAnchor(
+            boardInPhysicalCamera = solved.result,
+            physicalCameraInWorld = solved.physicalCameraWorld,
+            timestampNs = timestamp,
+        )
     }
 
-    /** Draws the outline by reprojecting the board model through the current pose. */
-    private fun publishTrackedOutline(pose: PlanarPoseSolver.Result) {
-        val focal = detectionIntrinsicsFocal ?: return
-        val principal = detectionIntrinsicsPrincipal ?: return
-        val model = boardModel()
-        val imagePoints = PlanarPoseSolver.projectBoardCorners(model, focal, principal, pose) ?: return
+    private fun createOrReplaceFallbackAnchor(
+        boardInPhysicalCamera: PlanarPoseSolver.Result?,
+        physicalCameraInWorld: Pose?,
+        timestampNs: Long,
+    ) {
+        val board = boardInPhysicalCamera ?: return
+        val camera = physicalCameraInWorld ?: return
+        val session = arSession.get() ?: return
+        val boardInWorld = camera.compose(Pose(board.translation, board.quaternion))
+        val anchor = try {
+            session.createAnchor(boardInWorld)
+        } catch (error: Exception) {
+            android.util.Log.w("ArAnchor", "Could not create board fallback anchor", error)
+            return
+        }
+        fallbackBoardAnchor?.detach()
+        fallbackBoardAnchor = anchor
+        lastFallbackAnchorRefreshNs = timestampNs
+        lastFallbackPublishNs = 0L
+    }
 
-        val viewPoints = FloatArray(imagePoints.size)
-        val frame = latestFrame ?: return
+    /**
+     * Publishes an anchor-derived pose only while a recent visual solve has gone
+     * stale. It preserves full 6-DoF parallax as the learner tilts the phone, while
+     * [trackBoard] takes over immediately again when a good image quad returns.
+     */
+    private fun publishBoardAnchorFallback(camera: Camera, timestampNs: Long): Boolean {
+        val anchor = fallbackBoardAnchor ?: return false
+        if (anchor.trackingState != TrackingState.TRACKING) return false
+        val north = northAtNegativeY ?: return false
+        if (timestampNs - lastFallbackPublishNs < FALLBACK_PUBLISH_INTERVAL_NS) return true
+
+        val boardInPhysicalCamera = camera.pose.inverse().compose(anchor.pose)
+        val boardInDisplayCamera = camera.displayOrientedPose.inverse().compose(anchor.pose)
+        val calibration = BoardCalibration(
+            originMeters = anchor.pose.translation,
+            xAxis = anchor.pose.xAxis,
+            yAxis = anchor.pose.yAxis,
+            zAxis = anchor.pose.zAxis,
+            xExtentMeters = BOARD_LENGTH_M,
+            yExtentMeters = BOARD_WIDTH_M,
+        )
+        val outline = projectBoardOutline(camera, calibration)
+        if (outline.size != 4) return false
+
+        lastFallbackPublishNs = timestampNs
+        post {
+            listener?.onBoardOutline(outline)
+            listener?.onBoardPoseInCamera(
+                boardInPhysicalCamera.translation.copyOf(),
+                boardInPhysicalCamera.rotationQuaternion.copyOf(),
+                boardInDisplayCamera.translation.copyOf(),
+                boardInDisplayCamera.rotationQuaternion.copyOf(),
+                north,
+            )
+        }
+        return true
+    }
+
+    /**
+     * Blends a fresh physical-camera solve into the running estimate. Each solve
+     * carries independent corner noise, so using them raw makes the 3-D model
+     * twitch. The 2-D outline deliberately stays unsmoothed, because it is direct
+     * evidence from this frame and should not lag behind the real board.
+     */
+    private fun smoothBoardPose(fresh: PlanarPoseSolver.Result): PlanarPoseSolver.Result =
+        poseSmoother.smooth(smoothedBoardPose, fresh)
+
+    /**
+     * Draws the yellow outline from the current matched image-space quad. This keeps
+     * the overlay attached to the detected breadboard edge rather than to the smoothed
+     * 3-D pose used by the native renderer.
+     */
+    private fun publishMatchedCandidateOutline(imageCorners: FloatArray): Boolean? {
+        if (imageCorners.size != 8) return null
+
+        val viewPoints = FloatArray(imageCorners.size)
+        val frame = latestFrame ?: return null
         try {
             frame.transformCoordinates2d(
                 Coordinates2d.IMAGE_PIXELS,
-                imagePoints,
+                imageCorners,
                 Coordinates2d.VIEW,
                 viewPoints,
             )
         } catch (_: Exception) {
-            return
+            return null
         }
 
         val outline = (0 until 4).map { PointF(viewPoints[it * 2], viewPoints[it * 2 + 1]) }
+        val north = northAtNegativeY ?: run {
+            // orderedCorners keeps 0-1 and 2-3 as the two long edges of this matched
+            // detection quad. Choose the edge closer to the top of the phone display
+            // only once; doing this on every frame would make a nearly head-on board
+            // swap sides.
+            val negativeYEdge = (outline[0].y + outline[1].y) / 2f
+            val positiveYEdge = (outline[2].y + outline[3].y) / 2f
+            (negativeYEdge <= positiveYEdge).also { northAtNegativeY = it }
+        }
         post { listener?.onBoardOutline(outline) }
+        return north
+    }
+
+    /**
+     * Solves one detected quad without changing tracker state. A detector may begin
+     * a cyclic quad at any corner, and a steep perspective view can make the board's
+     * long edge look shorter in pixels than its short edge. Trying all cyclic and
+     * winding-preserving correspondence hypotheses makes the pose fit decide which
+     * board edge is X instead of relying on that fragile screen-space assumption.
+     */
+    private fun solveCandidate(index: Int): CandidateSolve? {
+        val raw = candidateImageCorners.getOrNull(index) ?: return null
+        val physicalToDisplayCamera = detectionPhysicalToDisplayCameraPose ?: return null
+        val physicalCameraWorld = detectionPhysicalCameraWorldPose ?: return null
+        val focal = detectionIntrinsicsFocal ?: return null
+        val principal = detectionIntrinsicsPrincipal ?: return null
+        val model = boardModel()
+        val centroid = centroidOf(raw)
+        val area = quadArea(raw)
+        val previous = lastOrderedCorners
+
+        var best: CandidateSolve? = null
+        for (direction in intArrayOf(1, -1)) {
+            for (start in 0 until 4) {
+                val corners = cyclicCornerOrder(raw, start, direction)
+                val solution = PlanarPoseSolver.solve(corners, model, focal, principal) ?: continue
+                val error = PlanarPoseSolver.reprojectionErrorPx(
+                    corners,
+                    model,
+                    focal,
+                    principal,
+                    solution,
+                )
+                if (!error.isFinite()) continue
+                val continuity = previous?.let { meanCornerDistance(corners, it) } ?: 0f
+                val candidate = CandidateSolve(
+                    index = index,
+                    orderedCorners = corners,
+                    result = solution,
+                    physicalToDisplayCamera = physicalToDisplayCamera,
+                    physicalCameraWorld = physicalCameraWorld,
+                    reprojectionErrorPx = error,
+                    centroid = centroid,
+                    areaPx = area,
+                    cornerContinuityPx = continuity,
+                )
+                val current = best
+                if (current == null || isBetterCornerOrder(candidate, current)) {
+                    best = candidate
+                }
+            }
+        }
+        return best
+    }
+
+    /** Prefer a calibrated fit, then preserve the pose correspondence over time. */
+    private fun isBetterCornerOrder(candidate: CandidateSolve, current: CandidateSolve): Boolean {
+        val residualDifference = candidate.reprojectionErrorPx - current.reprojectionErrorPx
+        if (abs(residualDifference) > RESIDUAL_TIE_PX) return residualDifference < 0f
+        return candidate.cornerContinuityPx < current.cornerContinuityPx
+    }
+
+    private fun cyclicCornerOrder(corners: FloatArray, start: Int, direction: Int): FloatArray {
+        val ordered = FloatArray(8)
+        for (corner in 0 until 4) {
+            val source = (start + direction * corner + 4) % 4
+            ordered[corner * 2] = corners[source * 2]
+            ordered[corner * 2 + 1] = corners[source * 2 + 1]
+        }
+        return ordered
+    }
+
+    private fun meanCornerDistance(first: FloatArray, second: FloatArray): Float {
+        var total = 0f
+        for (corner in 0 until 4) {
+            total += hypot(
+                first[corner * 2] - second[corner * 2],
+                first[corner * 2 + 1] - second[corner * 2 + 1],
+            )
+        }
+        return total / 4f
     }
 
     private fun boardModel(): FloatArray = floatArrayOf(
@@ -666,57 +1019,6 @@ class ArCameraPreview @JvmOverloads constructor(
         BOARD_LENGTH_M, BOARD_WIDTH_M,
         0f, BOARD_WIDTH_M,
     )
-
-    private fun solveOnce(index: Int) {
-        val raw = candidateImageCorners.getOrNull(index) ?: return
-        val stepPx = candidateStepPx.getOrElse(index) { 1 }.toFloat()
-        val capturePose = detectionCameraPose ?: return
-        val focal = detectionIntrinsicsFocal ?: return
-        val principal = detectionIntrinsicsPrincipal ?: return
-
-        val corners = orderedCorners(raw)
-        val longSide = sideLength(corners, 0)
-        val shortSide = sideLength(corners, 1)
-        if (shortSide <= 0f) return
-        val observedAspect = longSide / shortSide
-
-        val lengthMeters = BOARD_LENGTH_M
-        val widthMeters = BOARD_WIDTH_M
-
-        val model = floatArrayOf(
-            0f, 0f,
-            lengthMeters, 0f,
-            lengthMeters, widthMeters,
-            0f, widthMeters,
-        )
-        val solution = PlanarPoseSolver.solve(
-            corners,
-            model,
-            focal,
-            principal,
-        ) ?: run {
-            postError("Could not work out the board's position. Move slightly and try again.")
-            return
-        }
-
-        val error = PlanarPoseSolver.reprojectionErrorPx(
-            corners,
-            model,
-            focal,
-            principal,
-            solution,
-        )
-        if (error >= bestSolutionError) return
-
-        android.util.Log.d(
-            "ArSolve",
-            "step=$stepPx aspect=$observedAspect modelAspect=${lengthMeters / widthMeters} " +
-                "errorPx=$error depthM=${solution.translation[2]}",
-        )
-
-        bestSolutionCameraPose = solution
-        bestSolutionError = error
-    }
 
     private fun centroidOf(corners: FloatArray): PointF {
         var x = 0f
@@ -767,57 +1069,6 @@ class ArCameraPreview @JvmOverloads constructor(
         return abs(dot) < ANCHOR_REPUBLISH_ROTATION_DOT
     }
 
-    /**
-     * Puts the corners into the order the solver's board model expects: first edge
-     * along the board's long axis, and a consistent winding so the recovered plane
-     * normal faces the camera rather than away from it.
-     */
-    private fun orderedCorners(corners: FloatArray): FloatArray {
-        val longFirst = if (sideLength(corners, 0) >= sideLength(corners, 1)) {
-            corners.copyOf()
-        } else {
-            floatArrayOf(
-                corners[2], corners[3],
-                corners[4], corners[5],
-                corners[6], corners[7],
-                corners[0], corners[1],
-            )
-        }
-        val wound = if (signedArea(longFirst) >= 0f) {
-            longFirst
-        } else {
-            // Reverse while keeping a long edge first: 0,1,2,3 becomes 3,2,1,0.
-            floatArrayOf(
-                longFirst[6], longFirst[7],
-                longFirst[4], longFirst[5],
-                longFirst[2], longFirst[3],
-                longFirst[0], longFirst[1],
-            )
-        }
-
-        // "Long edge first with this winding" still admits two orderings, because a
-        // rectangle has two long edges: corner 0 may be either end of the board. Both
-        // are geometrically valid but they differ by 180 degrees, so picking freely
-        // each frame makes the pose flip end over end. Stay with whichever matches the
-        // previous frame's choice.
-        val flipped = floatArrayOf(
-            wound[4], wound[5],
-            wound[6], wound[7],
-            wound[0], wound[1],
-            wound[2], wound[3],
-        )
-        val previous = lastOrderedCorners
-        val chosen = if (previous == null) {
-            wound
-        } else {
-            val keep = hypot(wound[0] - previous[0], wound[1] - previous[1])
-            val swap = hypot(flipped[0] - previous[0], flipped[1] - previous[1])
-            if (keep <= swap) wound else flipped
-        }
-        lastOrderedCorners = chosen
-        return chosen
-    }
-
     /** Angle between two quaternions in radians, ignoring their double cover. */
     private fun angleBetween(a: FloatArray, b: FloatArray): Float {
         var dot = 0f
@@ -833,6 +1084,8 @@ class ArCameraPreview @JvmOverloads constructor(
         }
         return total / 2f
     }
+
+    private fun quadArea(quad: FloatArray): Float = abs(signedArea(quad))
 
     private fun sideLength(quad: FloatArray, index: Int): Float {
         val a = index * 2
@@ -876,9 +1129,14 @@ class ArCameraPreview @JvmOverloads constructor(
         // Capture the pose belonging to THIS image. Detection is asynchronous, so by
         // the time the solve runs the latest frame has a newer pose, and composing
         // with that would bake in however far the phone moved in between.
-        detectionCameraPose = frame.camera.pose
-        detectionIntrinsicsFocal = frame.camera.imageIntrinsics.focalLength
-        detectionIntrinsicsPrincipal = frame.camera.imageIntrinsics.principalPoint
+        val camera = frame.camera
+        detectionPhysicalToDisplayCameraPose = CameraPoseFrames.physicalToDisplayCamera(
+            physicalCameraPose = camera.pose,
+            displayOrientedCameraPose = camera.displayOrientedPose,
+        )
+        detectionPhysicalCameraWorldPose = camera.pose
+        detectionIntrinsicsFocal = camera.imageIntrinsics.focalLength
+        detectionIntrinsicsPrincipal = camera.imageIntrinsics.principalPoint
 
         val luma = lumaCopy
         val lenient = boardTrackingActive
@@ -927,7 +1185,6 @@ class ArCameraPreview @JvmOverloads constructor(
         // Keep the image-space corners too: the overlay needs view space to draw, but
         // the pose solve needs image space, and the two must stay index-aligned.
         candidateImageCorners = candidates.map { it.corners }
-        candidateStepPx = candidates.map { it.stepPx }
 
         if (solveAttemptsLeft > 0) {
             attemptBoardSolve()
@@ -960,7 +1217,12 @@ class ArCameraPreview @JvmOverloads constructor(
             viewportWidth = surfaceWidth,
             viewportHeight = surfaceHeight,
         )
-        post { listener?.onCameraState(state) }
+        val projection = FloatArray(16)
+        camera.getProjectionMatrix(projection, 0, FILAMENT_NEAR_M, FILAMENT_FAR_M)
+        post {
+            listener?.onCameraState(state)
+            listener?.onCameraProjection(projection)
+        }
     }
 
     private fun postError(message: String) {
@@ -971,21 +1233,19 @@ class ArCameraPreview @JvmOverloads constructor(
         /** Distinct from null so the first "tracking is fine" result is still reported. */
         const val NOT_YET_REPORTED = "\u0000"
         const val CAMERA_STATE_INTERVAL_NS = 100_000_000L // 10 messages per second.
+        /** Must match the transparent native renderer's Filament camera planes. */
+        const val FILAMENT_NEAR_M = 0.02f
+        const val FILAMENT_FAR_M = 20f
         const val TRACKING_HINT_STABLE_NS = 1_000_000_000L // Ignore anything shorter than a second.
         const val TRACKING_HINT_MIN_VISIBLE_NS = 1_500_000_000L
         const val RECTANGLE_INTERVAL_NS = 300_000_000L // Roughly three detections per second.
 
         /**
-         * Outer dimensions of the demo breadboard, long edge first.
+         * Outer dimensions of the physical demo breadboard, long edge first.
          *
-         * MEASURE THESE. They set the metric scale of the entire board frame, so an
-         * error here scales everything Unity places from it, and their ratio decides
-         * whether the pose solve converges at all. The current values are inferred
-         * from an observed image aspect of about 2.5:1, not from a ruler.
-         *
-         * Guessing between several standard models was worse than one correct model:
-         * a near-square observation got classified as a half-size board and produced
-         * a wildly wrong scale.
+         * This particular board is 165 mm × 65 mm. It must stay in sync with the
+         * renderer: its aspect ratio is what lets the planar pose solver recover a
+         * physically valid camera pose.
          */
         const val BOARD_LENGTH_M = 0.165f
         const val BOARD_WIDTH_M = 0.065f
@@ -1000,9 +1260,6 @@ class ArCameraPreview @JvmOverloads constructor(
         /** How far a candidate may sit from the tracked one and still be the same board. */
         const val CANDIDATE_MATCH_RADIUS_PX = 90f
         const val TRACK_MATCH_RADIUS_PX = 260f
-
-        /** Weight of each fresh solve in the running pose. Lower is steadier but laggier. */
-        const val POSE_SMOOTHING = 0.6f
 
         /**
          * Once tracking, solve on every camera frame. Measured detection cost is 2-9 ms
@@ -1024,6 +1281,24 @@ class ArCameraPreview @JvmOverloads constructor(
 
         /** Fit tolerance multiplier while tracking, where blur degrades corners. */
         const val TRACKING_TOLERANCE_FACTOR = 2.5f
+
+        /** Treat nearly-equal pose residuals as ties, then preserve motion continuity. */
+        const val RESIDUAL_TIE_PX = 1f
+        const val CENTROID_TIE_PX = 8f
+        const val AREA_CHANGE_TIE = 0.05f
+
+        /**
+         * A full board cannot realistically change projected area by this much in one
+         * 30 Hz detector step. The broad bounds only reject obvious inner fragments.
+         */
+        const val MIN_TRACKING_AREA_RATIO = 0.25f
+        const val MAX_TRACKING_AREA_RATIO = 4f
+
+        /** Move to the already-verified AR anchor before the visual grace period ends. */
+        const val ANCHOR_FALLBACK_START_NS = 250_000_000L
+        /** Rebase a fallback anchor only while visual tracking confirms the board. */
+        const val FALLBACK_ANCHOR_REFRESH_NS = 1_000_000_000L
+        const val FALLBACK_PUBLISH_INTERVAL_NS = 33_000_000L
 
         /** Weight of the newest centroid step in the velocity estimate. */
         const val VELOCITY_SMOOTHING = 0.5f

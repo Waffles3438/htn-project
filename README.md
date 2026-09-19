@@ -1,35 +1,61 @@
 # Breadboard AR Viewer (Android)
 
-Native Android companion app for the laptop-hosted Unity breadboard demo. It keeps the physical camera and calibration on the phone, then draws Unity-rendered transparent overlay frames over the ARCore camera preview.
+This is the native Android AR viewer for the breadboard project. It detects the
+physical breadboard with the phone camera, places a transparent Filament-rendered
+GLB beside it, and keeps that model anchored while the phone moves.
+
+It does **not** use Unity Remote or a WebSocket. The phone pulls a completed
+`.glb` file from the backend over normal HTTP(S).
 
 ## What it does
 
-1. Connects to the laptop over the same Wi-Fi network with a WebSocket.
-2. Starts an ARCore camera session and sends pose/intrinsics at 10 Hz after calibration.
-3. Guides the student through three-point breadboard calibration: origin, positive X reference, positive Y reference.
-4. Receives transparent PNG frames rendered by Unity and layers them over the live camera view.
-5. Lets the student reset calibration when the phone or breadboard moves.
-
-The models from Sketchfab remain in the Unity project on the laptop. The phone receives rendered overlay frames, not Blender or mesh files.
+1. Starts an ARCore camera session and detects the physical breadboard.
+2. Lets the learner tap the detected board rectangle to lock it.
+3. Draws the yellow board outline and a 3-D model beside the physical board.
+4. Lets the learner enter a direct HTTP(S) `.glb` URL and tap **Load GLB** to
+   replace the bundled demonstration model at runtime.
+5. Keeps the bundled `breadboard.glb` as an offline fallback if no backend model
+   has been loaded.
 
 ## Run it
 
 1. Open this folder in Android Studio and let Gradle sync.
-2. If Android Studio does not find your Android SDK automatically, copy `local.properties.example` to `local.properties` and update `sdk.dir`.
-3. Connect an ARCore-capable Android device with USB debugging enabled.
-4. Run the `app` configuration once to install the debug APK. USB is only needed for installation/debugging; the final demo uses local Wi-Fi.
-5. Start the laptop signalling/overlay service.
-6. On the phone, enter `ws://<laptop-LAN-IP>:8080/ar` and a shared session ID, such as `demo-button-led`.
-7. Tap **Connect**, then **Calibrate**. Tap the same three physical board references agreed by the Unity team.
+2. Connect an ARCore-capable Android phone with USB debugging enabled and run the
+   `app` configuration.
+3. Start a backend that serves a self-contained `.glb` over HTTP(S).
+4. In the app, enter the direct model URL, for example
+   `http://192.168.1.42:8080/models/breadboard.glb`, then tap **Load GLB**.
+5. Tap **Calibrate**, point the phone at the physical breadboard, and tap its
+   detected rectangle.
 
-The demo manifest allows `ws://` over the local network. Use `wss://` and remove clear-text traffic for anything beyond a controlled demo.
+The phone must be able to reach the backend URL. Use your laptop's LAN IP for a
+normal Wi-Fi demo; `localhost` on the phone means the phone itself, not the laptop.
+The app currently permits local-network `http://` URLs for development. Use
+`https://` for any deployment outside a controlled demo network.
 
-## Laptop contract
+## Quick local GLB server
 
-See [PROTOCOL.md](PROTOCOL.md). Unity must use the camera pose, intrinsics, and calibration data to render the relevant components into a transparent PNG at the reported phone viewport size. Send each frame back with the `overlay_frame` message.
+The included replacement mock server serves the bundled GLB with ordinary HTTP:
+
+```powershell
+cd mock-server
+npm start
+```
+
+Then enter `http://<laptop-LAN-IP>:8080/models/breadboard.glb` in the app. It is
+only a test server; your real backend should implement the contract below.
+
+## Backend contract
+
+See [PROTOCOL.md](PROTOCOL.md) for the exact HTTP request/response and model-axis
+contract to give the backend and 3-D asset teammates.
 
 ## Project boundaries
 
-- This is the Android viewer only. It does not call the circuit-design API or import Sketchfab assets.
-- It intentionally does not use Unity Remote; Unity Remote is a development preview tool, not the final AR viewer.
-- Portrait orientation is fixed for the demo. Both the Android camera and Unity overlay must use the same orientation and viewport dimensions.
+- The Android app does not call the circuit-design API itself. The backend creates
+  or chooses the finished scene GLB, then exposes it at a URL.
+- The downloaded GLB must be a binary glTF 2.0 file with all textures and buffers
+  embedded. External `.bin` or texture URLs are not supported.
+- The app currently treats a downloaded model as one breadboard-sized instructional
+  overlay placed north of the detected board. It is not yet a per-component,
+  per-breadboard-pin scene protocol.

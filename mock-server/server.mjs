@@ -1,58 +1,75 @@
-import { WebSocketServer } from "ws";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { createServer } from "node:http";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
-const server = new WebSocketServer({ port, path: "/ar" });
-const lastPoseLogBySession = new Map();
+const serverDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(serverDirectory, "..");
+const modelFile = resolve(
+  repositoryRoot,
+  process.env.MODEL_FILE ?? "app/src/main/assets/models/breadboard.glb",
+);
 
-server.on("connection", (socket, request) => {
-  const clientAddress = request.socket.remoteAddress ?? "unknown client";
-  console.log(`Phone connected from ${clientAddress}`);
+const server = createServer(async (request, response) => {
+  const path = new URL(request.url ?? "/", "http://localhost").pathname;
 
-  socket.on("message", (data) => {
-    let message;
-    try {
-      message = JSON.parse(data.toString());
-    } catch {
-      socket.send(JSON.stringify({ type: "status", message: "Invalid JSON received." }));
+  if (request.method === "GET" && path === "/health") {
+    sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  if (request.method === "GET" && path === "/models/breadboard.glb") {
+    await sendGlb(request, response);
+    return;
+  }
+
+  sendJson(response, 404, {
+    error: "Use GET /models/breadboard.glb or GET /health.",
+  });
+});
+
+server.listen(port, "0.0.0.0", () => {
+  console.log(`GLB test server running at http://0.0.0.0:${port}/models/breadboard.glb`);
+  console.log("Enter your laptop's LAN IPv4 address in the Android app, not 0.0.0.0.");
+  console.log(`Serving ${modelFile}`);
+});
+
+async function sendGlb(request, response) {
+  try {
+    const details = await stat(modelFile);
+    const etag = `"${details.size}-${Math.trunc(details.mtimeMs)}"`;
+    if (request.headers["if-none-match"] === etag) {
+      response.writeHead(304, { ETag: etag });
+      response.end();
       return;
     }
 
-    const sessionId = message.sessionId ?? "unknown-session";
-    switch (message.type) {
-      case "hello":
-        console.log(`[${sessionId}] viewer connected`);
-        sendStatus(socket, sessionId, "Laptop connected. Ready to calibrate.");
-        break;
-      case "calibration":
-        console.log(`[${sessionId}] calibration received`, message.boardFrame);
-        sendStatus(socket, sessionId, "Calibration received. Sending camera poses to Unity is active.");
-        break;
-      case "camera_pose":
-        logCameraPose(sessionId, message);
-        break;
-      default:
-        console.log(`[${sessionId}] ignored message type: ${message.type}`);
-    }
-  });
-
-  socket.on("close", () => console.log(`Phone disconnected: ${clientAddress}`));
-  socket.on("error", (error) => console.warn(`Socket error for ${clientAddress}: ${error.message}`));
-});
-
-server.on("listening", () => {
-  console.log(`Mock server running at ws://0.0.0.0:${port}/ar`);
-  console.log("Use the laptop's Wi-Fi IPv4 address in the Android app, not 0.0.0.0.");
-});
-
-function sendStatus(socket, sessionId, message) {
-  socket.send(JSON.stringify({ type: "status", sessionId, message }));
+    response.writeHead(200, {
+      "Content-Type": "model/gltf-binary",
+      "Content-Length": details.size,
+      "Cache-Control": "no-store",
+      ETag: etag,
+    });
+    createReadStream(modelFile)
+      .on("error", (error) => {
+        console.error(`Could not read GLB: ${error.message}`);
+        if (!response.headersSent) sendJson(response, 500, { error: "Could not read model." });
+        else response.destroy(error);
+      })
+      .pipe(response);
+  } catch (error) {
+    console.error(`Could not serve GLB: ${error.message}`);
+    sendJson(response, 500, { error: "Could not find model file." });
+  }
 }
 
-function logCameraPose(sessionId, message) {
-  const now = Date.now();
-  const lastLog = lastPoseLogBySession.get(sessionId) ?? 0;
-  if (now - lastLog < 1000) return;
-  lastPoseLogBySession.set(sessionId, now);
-  const [x, y, z] = message.translationMeters ?? [];
-  console.log(`[${sessionId}] camera pose: ${x?.toFixed(2)}, ${y?.toFixed(2)}, ${z?.toFixed(2)}`);
+function sendJson(response, status, body) {
+  const payload = JSON.stringify(body);
+  response.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(payload),
+  });
+  response.end(payload);
 }

@@ -103,6 +103,43 @@ class RectangleDetectorTest {
         )
     }
 
+    @Test
+    fun `refines a non grid aligned trapezoid at source resolution`() {
+        // 1280 pixels triggers a 5-pixel detection step. The board deliberately
+        // avoids that grid, so this catches a regression where the outline remains
+        // quantised after the fast downsampled pass.
+        val width = 1280
+        val height = 720
+        val luma = ByteArray(width * height) { 30.toByte() }
+        val expected = floatArrayOf(
+            183f, 149f,
+            803f, 195f,
+            744f, 499f,
+            126f, 443f,
+        )
+        fillConvexQuad(luma, width, height, expected, 220)
+
+        val candidates = detector.detect(luma, width, height, width)
+
+        assertEquals(1, candidates.size)
+        assertEquals(5, candidates[0].stepPx)
+        val worstCornerDistance = expected.indices
+            .filter { it % 2 == 0 }
+            .maxOf { expectedIndex ->
+                val expectedX = expected[expectedIndex]
+                val expectedY = expected[expectedIndex + 1]
+                (0 until 4).minOf { detectedCorner ->
+                    val dx = candidates[0].corners[detectedCorner * 2] - expectedX
+                    val dy = candidates[0].corners[detectedCorner * 2 + 1] - expectedY
+                    kotlin.math.sqrt(dx * dx + dy * dy)
+                }
+            }
+        assertTrue(
+            "worst source-resolution corner error was $worstCornerDistance px",
+            worstCornerDistance <= 3f,
+        )
+    }
+
     private fun shoelaceArea(quad: FloatArray): Float {
         var total = 0f
         for (i in 0 until 4) {
@@ -120,6 +157,42 @@ class RectangleDetectorTest {
                 luma[y * WIDTH + x] = value.toByte()
             }
         }
+    }
+
+    private fun fillConvexQuad(
+        luma: ByteArray,
+        width: Int,
+        height: Int,
+        quad: FloatArray,
+        value: Int,
+    ) {
+        val minX = quad.filterIndexed { index, _ -> index % 2 == 0 }.min().toInt()
+        val maxX = quad.filterIndexed { index, _ -> index % 2 == 0 }.max().toInt()
+        val minY = quad.filterIndexed { index, _ -> index % 2 == 1 }.min().toInt()
+        val maxY = quad.filterIndexed { index, _ -> index % 2 == 1 }.max().toInt()
+        for (y in minY..maxY) {
+            for (x in minX..maxX) {
+                if (pointIsInsideConvexQuad(x + 0.5f, y + 0.5f, quad)) {
+                    luma[y * width + x] = value.toByte()
+                }
+            }
+        }
+    }
+
+    private fun pointIsInsideConvexQuad(x: Float, y: Float, quad: FloatArray): Boolean {
+        var sign = 0
+        for (corner in 0 until 4) {
+            val next = (corner + 1) % 4
+            val ax = quad[corner * 2]
+            val ay = quad[corner * 2 + 1]
+            val bx = quad[next * 2]
+            val by = quad[next * 2 + 1]
+            val cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+            if (kotlin.math.abs(cross) < 1e-4f) continue
+            val current = if (cross > 0f) 1 else -1
+            if (sign == 0) sign = current else if (current != sign) return false
+        }
+        return sign != 0
     }
 
     private companion object {

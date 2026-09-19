@@ -1,7 +1,6 @@
 package com.htn.breadboardar.ui
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -29,9 +28,10 @@ class CalibrationOverlayView @JvmOverloads constructor(
     private val tapPoints = mutableListOf<PointF>()
     private var surfaceTargets: List<PointF> = emptyList()
     private var boardOutline: List<PointF> = emptyList()
+    private var smoothedBoardOutline: FloatArray? = null
+    private val boardOutlineSmoother = ScreenQuadSmoother()
     private var candidateRectangles: List<List<PointF>> = emptyList()
     private var selectedRectangle: List<PointF>? = null
-    private var remoteOverlay: Bitmap? = null
 
     private val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(128, 203, 196)
@@ -57,8 +57,10 @@ class CalibrationOverlayView @JvmOverloads constructor(
     private val boardOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(255, 214, 70)
         style = Paint.Style.STROKE
-        strokeWidth = 8f
-        setShadowLayer(6f, 0f, 1f, Color.BLACK)
+        // A narrow, low-shadow stroke makes the detected boundary readable without
+        // visually adding a large margin around an otherwise accurate quad.
+        strokeWidth = 5f
+        setShadowLayer(3f, 0f, 1f, Color.BLACK)
     }
     private val candidatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(120, 230, 255)
@@ -72,11 +74,12 @@ class CalibrationOverlayView @JvmOverloads constructor(
         strokeWidth = 10f
         setShadowLayer(6f, 0f, 1f, Color.BLACK)
     }
-    private val overlayPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     fun beginCalibration() {
         isCalibrating = true
         tapPoints.clear()
+        boardOutline = emptyList()
+        smoothedBoardOutline = null
         candidateRectangles = emptyList()
         selectedRectangle = null
         invalidate()
@@ -93,9 +96,9 @@ class CalibrationOverlayView @JvmOverloads constructor(
         tapPoints.clear()
         surfaceTargets = emptyList()
         boardOutline = emptyList()
+        smoothedBoardOutline = null
         candidateRectangles = emptyList()
         selectedRectangle = null
-        remoteOverlay = null
         invalidate()
     }
 
@@ -110,9 +113,28 @@ class CalibrationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
-    /** The outline is projected every frame from the three real-world calibration points. */
+    /**
+     * Shows the board outline with a screen-space adaptive filter. The input is a
+     * direct detector result, so this removes fast corner shimmer without hiding
+     * genuine movement of the board in the camera view.
+     */
     fun showBoardOutline(points: List<PointF>) {
-        boardOutline = points
+        if (points.size != OUTLINE_CORNERS) {
+            boardOutline = emptyList()
+            smoothedBoardOutline = null
+            invalidate()
+            return
+        }
+
+        val fresh = FloatArray(OUTLINE_CORNERS * 2) { index ->
+            val point = points[index / 2]
+            if (index % 2 == 0) point.x else point.y
+        }
+        val filtered = boardOutlineSmoother.smooth(smoothedBoardOutline, fresh)
+        smoothedBoardOutline = filtered
+        boardOutline = List(OUTLINE_CORNERS) { corner ->
+            PointF(filtered[corner * 2], filtered[corner * 2 + 1])
+        }
         invalidate()
     }
 
@@ -135,17 +157,8 @@ class CalibrationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
-    /** Unity sends a PNG with transparent background, rendered for this phone's camera pose. */
-    fun showRemoteOverlay(bitmap: Bitmap) {
-        remoteOverlay = bitmap
-        invalidate()
-    }
-
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        remoteOverlay?.let { bitmap ->
-            canvas.drawBitmap(bitmap, null, android.graphics.Rect(0, 0, width, height), overlayPaint)
-        }
 
         if (isCalibrating && surfaceTargets.isNotEmpty()) {
             surfaceTargets.forEach { target ->
@@ -230,5 +243,9 @@ class CalibrationOverlayView @JvmOverloads constructor(
             j = i
         }
         return inside
+    }
+
+    private companion object {
+        const val OUTLINE_CORNERS = 4
     }
 }

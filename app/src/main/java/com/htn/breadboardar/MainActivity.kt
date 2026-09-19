@@ -2,7 +2,6 @@ package com.htn.breadboardar
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
 import android.graphics.PointF
 import android.os.Bundle
 import android.view.View
@@ -26,23 +25,23 @@ import com.htn.breadboardar.ar.ArCameraPreview
 import com.htn.breadboardar.ar.BoardCalibration
 import com.htn.breadboardar.ar.CameraState
 import com.htn.breadboardar.ar.ThreePointCalibrator
-import com.htn.breadboardar.network.LaptopSocket
+import com.htn.breadboardar.network.GlbModelDownloader
+import com.htn.breadboardar.render.NativeBreadboardRenderer
 import com.htn.breadboardar.ui.CalibrationOverlayView
 
-class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket.Listener {
+class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModelDownloader.Listener {
     private lateinit var preview: ArCameraPreview
     private lateinit var overlay: CalibrationOverlayView
+    private lateinit var nativeBreadboardRenderer: NativeBreadboardRenderer
     private lateinit var statusText: TextView
-    private lateinit var serverUrl: EditText
-    private lateinit var sessionId: EditText
-    private lateinit var connectButton: Button
+    private lateinit var modelUrl: EditText
+    private lateinit var loadModelButton: Button
     private lateinit var calibrateButton: Button
     private lateinit var resetButton: Button
 
     private val calibrator = ThreePointCalibrator()
-    private val laptopSocket = LaptopSocket(this)
+    private val modelDownloader = GlbModelDownloader(this)
     private var arSession: Session? = null
-    private var socketConnected = false
     private var activeCalibration: BoardCalibration? = null
     private var pendingCalibrationTap: PointF? = null
     private var userRequestedArInstall = true
@@ -72,10 +71,13 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
 
         preview = findViewById(R.id.ar_preview)
         overlay = findViewById(R.id.calibration_overlay)
+        nativeBreadboardRenderer = NativeBreadboardRenderer(
+            textureView = findViewById(R.id.model_overlay),
+            assets = assets,
+        )
         statusText = findViewById(R.id.status_text)
-        serverUrl = findViewById(R.id.server_url)
-        sessionId = findViewById(R.id.session_id)
-        connectButton = findViewById(R.id.connect_button)
+        modelUrl = findViewById(R.id.model_url)
+        loadModelButton = findViewById(R.id.load_model_button)
         calibrateButton = findViewById(R.id.calibrate_button)
         resetButton = findViewById(R.id.reset_button)
 
@@ -91,35 +93,34 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
             }
         }
 
-        connectButton.setOnClickListener(::connectToLaptop)
+        loadModelButton.setOnClickListener(::loadGlbFromUrl)
         calibrateButton.setOnClickListener(::beginCalibration)
         resetButton.setOnClickListener { resetCalibration("Calibration reset. Tap Calibrate to begin again.") }
-        showStatus("Connect to the laptop, then calibrate the breadboard.")
+        showStatus("Tap Calibrate to find your breadboard. Optionally load a .glb model from your backend.")
     }
 
     override fun onResume() {
         super.onResume()
+        nativeBreadboardRenderer.resume()
         startAr()
     }
 
     override fun onPause() {
+        nativeBreadboardRenderer.pause()
         preview.onPause()
         arSession?.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
+        nativeBreadboardRenderer.destroy()
         preview.release()
-        laptopSocket.close()
+        modelDownloader.close()
         arSession?.close()
         super.onDestroy()
     }
 
-    override fun onCameraState(state: CameraState) {
-        if (activeCalibration != null && socketConnected) {
-            laptopSocket.sendCameraState(state)
-        }
-    }
+    override fun onCameraState(@Suppress("UNUSED_PARAMETER") state: CameraState) = Unit
 
     override fun onCalibrationHit(pose: Pose) {
         try {
@@ -134,8 +135,7 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
                 overlay.endCalibration()
                 preview.setCalibrationActive(false)
                 preview.setBoardOutline(calibration)
-                laptopSocket.sendCalibration(calibration)
-                showStatus("Calibrated. Waiting for Unity overlay frames.")
+                showStatus("Board calibrated. Tap Reset to locate it again.")
             }
         } catch (error: IllegalArgumentException) {
             pendingCalibrationTap = null
@@ -181,6 +181,7 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
     }
 
     override fun onBoardVisibility(visible: Boolean) {
+        if (!visible) nativeBreadboardRenderer.hide()
         showStatus(
             if (visible) {
                 "Board locked (fit ${boardFitPx}px). Keep the whole board in view."
@@ -191,61 +192,74 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
         )
     }
 
-    override fun onBoardPoseInCamera(translation: FloatArray, quaternion: FloatArray) {
-        if (socketConnected) laptopSocket.sendBoardPoseInCamera(translation, quaternion)
+    override fun onBoardPoseInCamera(
+        @Suppress("UNUSED_PARAMETER") physicalTranslation: FloatArray,
+        @Suppress("UNUSED_PARAMETER") physicalQuaternion: FloatArray,
+        displayTranslation: FloatArray,
+        displayQuaternion: FloatArray,
+        northAtNegativeY: Boolean,
+    ) {
+        nativeBreadboardRenderer.showBoardNorthOfOutline(
+            translation = displayTranslation,
+            quaternion = displayQuaternion,
+            northAtNegativeY = northAtNegativeY,
+        )
     }
 
-    override fun onBoardCalibrated(calibration: BoardCalibration) {
+    override fun onCameraProjection(projection: FloatArray) {
+        nativeBreadboardRenderer.updateArCameraProjection(projection)
+    }
+
+    override fun onBoardCalibrated(@Suppress("UNUSED_PARAMETER") calibration: BoardCalibration) {
         val isFirst = activeCalibration == null
         activeCalibration = calibration
         // The yellow outline is drawn from the anchor every frame, so if it stays on
         // the real board as you move, the pose is right.
         overlay.clearSelectedRectangle()
-        if (socketConnected) laptopSocket.sendCalibration(calibration)
         if (isFirst) {
             showStatus("Board anchored. The yellow outline should stay on the breadboard as you move.")
         }
     }
 
-    override fun onSocketStatus(message: String, connected: Boolean) {
-        socketConnected = connected
-        calibrateButton.isEnabled = connected && arSession != null
-        resetButton.isEnabled = arSession != null
-        // Keep the primary action compact enough to remain on one line alongside
-        // the calibration controls on narrow phone screens. Tapping it always
-        // opens a fresh WebSocket connection, whether this is the first attempt
-        // or a reconnect.
-        connectButton.text = "Connect"
+    override fun onGlbDownloaded(buffer: java.nio.ByteBuffer, sourceUrl: String) {
+        loadModelButton.isEnabled = true
+        runCatching { nativeBreadboardRenderer.replaceModelGlb(buffer) }
+            .onSuccess {
+                showStatus("Loaded .glb model from ${sourceUrl.substringAfterLast('/')}. Calibrate to place it.")
+            }
+            .onFailure { error ->
+                showStatus(error.message ?: "The downloaded GLB could not be rendered.")
+            }
+    }
+
+    override fun onGlbDownloadFailed(message: String) {
+        loadModelButton.isEnabled = true
         showStatus(message)
     }
 
-    override fun onOverlayFrame(bitmap: Bitmap) {
-        if (activeCalibration != null) {
-            overlay.showRemoteOverlay(bitmap)
-        }
-    }
-
-    private fun connectToLaptop(@Suppress("UNUSED_PARAMETER") view: View) {
-        val url = serverUrl.text.toString().trim()
-        val requestedSessionId = sessionId.text.toString().trim()
-        if (url.isBlank() || requestedSessionId.isBlank()) {
-            showStatus("Enter the laptop WebSocket URL and a session ID.")
+    private fun loadGlbFromUrl(@Suppress("UNUSED_PARAMETER") view: View) {
+        val url = modelUrl.text.toString().trim()
+        if (url.isBlank()) {
+            showStatus("Enter the direct HTTP(S) URL of a .glb file.")
             return
         }
-        runCatching { laptopSocket.connect(url, requestedSessionId) }
-            .onFailure { showStatus(it.message ?: "Could not start laptop connection.") }
+        runCatching { modelDownloader.download(url) }
+            .onSuccess {
+                loadModelButton.isEnabled = false
+                showStatus("Downloading .glb model…")
+            }
+            .onFailure { error ->
+                showStatus(error.message ?: "Could not start the GLB download.")
+            }
     }
 
     private fun beginCalibration(@Suppress("UNUSED_PARAMETER") view: View) {
-        if (!socketConnected) {
-            showStatus("Connect to the laptop before calibrating.")
-            return
-        }
         activeCalibration = null
         pendingCalibrationTap = null
         calibrator.reset()
         selectedBoardCorners = null
         preview.clearBoardOutline()
+        nativeBreadboardRenderer.hide()
         preview.setCalibrationActive(true)
         preview.setRectangleDetectionActive(true)
         overlay.beginCalibration()
@@ -257,6 +271,7 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
         calibrator.reset()
         selectedBoardCorners = null
         preview.clearBoardOutline()
+        nativeBreadboardRenderer.hide()
         preview.setCalibrationActive(false)
         preview.setRectangleDetectionActive(false)
         overlay.resetCalibration()
@@ -293,7 +308,7 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
 
             arSession?.resume()
             preview.onResume()
-            calibrateButton.isEnabled = socketConnected
+            calibrateButton.isEnabled = arSession != null
             resetButton.isEnabled = true
         } catch (exception: UnavailableArcoreNotInstalledException) {
             showStatus("Google Play Services for AR must be installed.")
