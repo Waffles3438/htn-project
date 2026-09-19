@@ -41,6 +41,24 @@ class PlanarPoseSolverTest {
     }
 
     @Test
+    fun `reprojects a board at a 45 degree viewing angle`() {
+        // The app must be able to retain a valid solve while the learner tilts the
+        // phone. This verifies the calibrated planar solve itself has no 45-degree
+        // limitation; real-camera loss at that angle must therefore be handled by
+        // candidate selection or the AR anchor fallback, not by accepting bad poses.
+        val corners = project(
+            rotationAboutX((Math.PI / 4.0).toFloat()),
+            floatArrayOf(0.025f, -0.018f, 0.42f),
+        )
+
+        val result = PlanarPoseSolver.solve(corners, BOARD, FOCAL, PRINCIPAL)
+
+        assertNotNull(result)
+        val error = PlanarPoseSolver.reprojectionErrorPx(corners, BOARD, FOCAL, PRINCIPAL, result!!)
+        assertTrue("45-degree reprojection error was $error px", error < 0.5f)
+    }
+
+    @Test
     fun `reprojects a board rotated in its own plane`() {
         val corners = project(rotationAboutZ(0.6f), floatArrayOf(-0.01f, 0.015f, 0.3f))
 

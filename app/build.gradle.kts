@@ -42,8 +42,18 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.google.ar:core:1.33.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Filament publishes Android releases as AARs on its official GitHub release
+    // page, rather than the Maven artifacts that older setup guides reference.
+    // Bundling the matched 1.71.4 set keeps debug APK builds reproducible. This is
+    // the newest tested release whose AAR metadata supports this project's API-35
+    // compile SDK.
+    implementation(files("libs/filament-v1.71.4-android.aar"))
+    implementation(files("libs/gltfio-v1.71.4-android.aar"))
+    implementation(files("libs/filament-utils-v1.71.4-android.aar"))
+    // ModelViewer in filament-utils uses coroutines for optional external glTF
+    // resources. The supplied GLB is self-contained, but the runtime class still
+    // needs this lightweight Android dependency present.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4")
 
     testImplementation("junit:junit:4.13.2")
 }
-

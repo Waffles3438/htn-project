@@ -109,8 +109,25 @@ internal class RectangleDetector {
             // a rectangle is a trapezoid, so forcing a rectangle overshoots the real
             // outline and biases the corners. Refine to a general quad.
             val quad = refineQuad(hull, rect) ?: rect
-            for (i in quad.indices) quad[i] *= step.toFloat()
-            candidates += Candidate(quad, rectArea * step * step, step)
+            val fullResolutionQuad = FloatArray(quad.size) { index ->
+                quad[index] * step.toFloat()
+            }
+
+            // The connected-component pass deliberately runs on a small image. That
+            // is fast enough to run continuously, but it leaves each side quantised
+            // to [step] source pixels. Once we know where the board is, a tiny
+            // full-resolution search along its four sides recovers the actual luma
+            // transition without paying the cost of full-resolution blob labelling.
+            val sourceRefinedQuad = refineAtSourceResolution(
+                luma = luma,
+                width = width,
+                height = height,
+                rowStride = rowStride,
+                threshold = threshold,
+                coarseQuad = fullResolutionQuad,
+                step = step,
+            ) ?: fullResolutionQuad
+            candidates += Candidate(sourceRefinedQuad, polygonArea(sourceRefinedQuad), step)
         }
 
         return candidates.sortedByDescending { it.areaPx }.take(MAX_CANDIDATES)
@@ -403,6 +420,318 @@ internal class RectangleDetector {
         return quad
     }
 
+    /** A total-least-squares line represented by a point and a unit direction. */
+    private data class Line(
+        val originX: Float,
+        val originY: Float,
+        val directionX: Float,
+        val directionY: Float,
+    )
+
+    /**
+     * Refines the coarse, downsampled quad against the original camera luma plane.
+     *
+     * This is intentionally a local operation: full-resolution connected-component
+     * labelling would be expensive, while a narrow search around four known sides is
+     * small enough to keep detection responsive. Every validation failure falls back
+     * to the established coarse result.
+     */
+    private fun refineAtSourceResolution(
+        luma: ByteArray,
+        width: Int,
+        height: Int,
+        rowStride: Int,
+        threshold: Int,
+        coarseQuad: FloatArray,
+        step: Int,
+    ): FloatArray? {
+        if (step <= 1) return null
+
+        val centreX = (coarseQuad[0] + coarseQuad[2] + coarseQuad[4] + coarseQuad[6]) / 4f
+        val centreY = (coarseQuad[1] + coarseQuad[3] + coarseQuad[5] + coarseQuad[7]) / 4f
+        val lines = arrayOfNulls<Line>(4)
+        for (side in 0 until 4) {
+            val a = side * 2
+            val b = ((side + 1) % 4) * 2
+            val edgeX = coarseQuad[b] - coarseQuad[a]
+            val edgeY = coarseQuad[b + 1] - coarseQuad[a + 1]
+            val length = sqrt(edgeX * edgeX + edgeY * edgeY)
+            if (length < 1e-3f) return null
+
+            val tangentX = edgeX / length
+            val tangentY = edgeY / length
+            var outwardX = -tangentY
+            var outwardY = tangentX
+            val midX = (coarseQuad[a] + coarseQuad[b]) / 2f
+            val midY = (coarseQuad[a + 1] + coarseQuad[b + 1]) / 2f
+            // Make positive offsets point away from the candidate, independent of
+            // whether its corners are clockwise or counter-clockwise.
+            if ((centreX - midX) * outwardX + (centreY - midY) * outwardY > 0f) {
+                outwardX = -outwardX
+                outwardY = -outwardY
+            }
+
+            val line = refineSourceSide(
+                luma,
+                width,
+                height,
+                rowStride,
+                threshold,
+                coarseQuad[a],
+                coarseQuad[a + 1],
+                tangentX,
+                tangentY,
+                outwardX,
+                outwardY,
+                length,
+                step,
+            ) ?: return null
+            if (abs(line.directionX * tangentX + line.directionY * tangentY) <
+                MIN_SOURCE_DIRECTION_AGREEMENT
+            ) {
+                return null
+            }
+            lines[side] = line
+        }
+
+        val refined = FloatArray(8)
+        for (corner in 0 until 4) {
+            val previous = lines[(corner + 3) % 4] ?: return null
+            val current = lines[corner] ?: return null
+            val intersection = intersect(
+                previous.originX,
+                previous.originY,
+                previous.directionX,
+                previous.directionY,
+                current.originX,
+                current.originY,
+                current.directionX,
+                current.directionY,
+            ) ?: return null
+            refined[corner * 2] = intersection[0]
+            refined[corner * 2 + 1] = intersection[1]
+        }
+
+        if (!isConvex(refined)) return null
+        val coarseArea = polygonArea(coarseQuad)
+        val refinedArea = polygonArea(refined)
+        if (coarseArea <= 0f || refinedArea <= 0f ||
+            abs(refinedArea - coarseArea) > coarseArea * MAX_SOURCE_AREA_DEVIATION
+        ) {
+            return null
+        }
+        for (corner in 0 until 4) {
+            val x = refined[corner * 2]
+            val y = refined[corner * 2 + 1]
+            if (!x.isFinite() || !y.isFinite() ||
+                x < -SOURCE_CORNER_MARGIN_PX || y < -SOURCE_CORNER_MARGIN_PX ||
+                x > width - 1 + SOURCE_CORNER_MARGIN_PX ||
+                y > height - 1 + SOURCE_CORNER_MARGIN_PX
+            ) {
+                return null
+            }
+        }
+        return refined
+    }
+
+    /** Fits a source-resolution side from several bright-to-dark edge samples. */
+    private fun refineSourceSide(
+        luma: ByteArray,
+        width: Int,
+        height: Int,
+        rowStride: Int,
+        threshold: Int,
+        startX: Float,
+        startY: Float,
+        tangentX: Float,
+        tangentY: Float,
+        outwardX: Float,
+        outwardY: Float,
+        length: Float,
+        step: Int,
+    ): Line? {
+        val sampleCount = (length / maxOf(SOURCE_SAMPLE_SPACING_PX, step * 1.5f))
+            .toInt()
+            .coerceIn(MIN_SOURCE_SIDE_SAMPLES, MAX_SOURCE_SIDE_SAMPLES)
+        val pointsX = FloatArray(sampleCount)
+        val pointsY = FloatArray(sampleCount)
+        var pointCount = 0
+        val searchRadius = maxOf(MIN_SOURCE_SEARCH_RADIUS_PX, step * 2 + 2)
+
+        for (sample in 0 until sampleCount) {
+            // Corners are the part most affected by threshold rounding. The middle
+            // of every side is clean, and intersections recover the true corners.
+            val fraction = SOURCE_SIDE_START_FRACTION +
+                (1f - 2f * SOURCE_SIDE_START_FRACTION) * sample / (sampleCount - 1).toFloat()
+            val baseX = startX + tangentX * length * fraction
+            val baseY = startY + tangentY * length * fraction
+            val edgeOffset = outerBrightToDarkTransition(
+                luma,
+                width,
+                height,
+                rowStride,
+                threshold,
+                baseX,
+                baseY,
+                tangentX,
+                tangentY,
+                outwardX,
+                outwardY,
+                searchRadius,
+            ) ?: continue
+            pointsX[pointCount] = baseX + outwardX * edgeOffset
+            pointsY[pointCount] = baseY + outwardY * edgeOffset
+            pointCount++
+        }
+        if (pointCount < MIN_SOURCE_SIDE_SAMPLES) return null
+
+        val initial = fitLine(pointsX, pointsY, pointCount) ?: return null
+        val residuals = FloatArray(pointCount)
+        for (index in 0 until pointCount) {
+            residuals[index] = perpendicularDistance(pointsX[index], pointsY[index], initial)
+        }
+        val sortedResiduals = residuals.copyOf()
+        sortedResiduals.sort()
+        val medianResidual = sortedResiduals[pointCount / 2]
+        val inlierLimit = maxOf(
+            MIN_SOURCE_INLIER_DISTANCE_PX,
+            minOf(MAX_SOURCE_INLIER_DISTANCE_PX, medianResidual * SOURCE_INLIER_MULTIPLIER),
+        )
+
+        val inlierX = FloatArray(pointCount)
+        val inlierY = FloatArray(pointCount)
+        var inlierCount = 0
+        for (index in 0 until pointCount) {
+            if (residuals[index] > inlierLimit) continue
+            inlierX[inlierCount] = pointsX[index]
+            inlierY[inlierCount] = pointsY[index]
+            inlierCount++
+        }
+        if (inlierCount < MIN_SOURCE_SIDE_SAMPLES ||
+            inlierCount * 100 < pointCount * MIN_SOURCE_INLIER_PERCENT
+        ) {
+            return null
+        }
+        return fitLine(inlierX, inlierY, inlierCount)
+    }
+
+    /**
+     * The board is the bright object, so its outer edge is the last sustained
+     * bright-to-dark transition while walking from the interior toward the outside.
+     * Keeping the last transition avoids choosing a dark breadboard hole instead.
+     */
+    private fun outerBrightToDarkTransition(
+        luma: ByteArray,
+        width: Int,
+        height: Int,
+        rowStride: Int,
+        threshold: Int,
+        baseX: Float,
+        baseY: Float,
+        tangentX: Float,
+        tangentY: Float,
+        outwardX: Float,
+        outwardY: Float,
+        searchRadius: Int,
+    ): Float? {
+        var lastTransition: Float? = null
+        for (offset in -searchRadius until searchRadius) {
+            val inside = stripLuma(
+                luma, width, height, rowStride,
+                baseX + outwardX * offset,
+                baseY + outwardY * offset,
+                tangentX, tangentY,
+            )
+            val outside = stripLuma(
+                luma, width, height, rowStride,
+                baseX + outwardX * (offset + 1),
+                baseY + outwardY * (offset + 1),
+                tangentX, tangentY,
+            )
+            if (!inside.isFinite() || !outside.isFinite()) continue
+            if (inside > threshold && outside <= threshold &&
+                inside - outside >= MIN_SOURCE_EDGE_CONTRAST
+            ) {
+                // A board hole can create a one-pixel transition. Require a little
+                // bright support inside and dark support outside before accepting it.
+                val interiorSupport = stripLuma(
+                    luma, width, height, rowStride,
+                    baseX + outwardX * (offset - SOURCE_EDGE_SUPPORT_PX),
+                    baseY + outwardY * (offset - SOURCE_EDGE_SUPPORT_PX),
+                    tangentX, tangentY,
+                )
+                val exteriorSupport = stripLuma(
+                    luma, width, height, rowStride,
+                    baseX + outwardX * (offset + 1 + SOURCE_EDGE_SUPPORT_PX),
+                    baseY + outwardY * (offset + 1 + SOURCE_EDGE_SUPPORT_PX),
+                    tangentX, tangentY,
+                )
+                if (interiorSupport > threshold && exteriorSupport <= threshold) {
+                    lastTransition = offset + 0.5f
+                }
+            }
+        }
+        return lastTransition
+    }
+
+    /** Mean luma in a short strip parallel to a board side, or NaN off-frame. */
+    private fun stripLuma(
+        luma: ByteArray,
+        width: Int,
+        height: Int,
+        rowStride: Int,
+        centreX: Float,
+        centreY: Float,
+        tangentX: Float,
+        tangentY: Float,
+    ): Float {
+        var total = 0
+        for (offset in -SOURCE_STRIP_RADIUS_PX..SOURCE_STRIP_RADIUS_PX) {
+            val x = (centreX + tangentX * offset).toInt()
+            val y = (centreY + tangentY * offset).toInt()
+            if (x !in 0 until width || y !in 0 until height) return Float.NaN
+            total += luma[y * rowStride + x].toInt() and 0xFF
+        }
+        return total.toFloat() / (SOURCE_STRIP_RADIUS_PX * 2 + 1)
+    }
+
+    private fun fitLine(pointsX: FloatArray, pointsY: FloatArray, count: Int): Line? {
+        if (count < 2) return null
+        var sumX = 0.0
+        var sumY = 0.0
+        var sumXX = 0.0
+        var sumXY = 0.0
+        var sumYY = 0.0
+        for (index in 0 until count) {
+            val x = pointsX[index].toDouble()
+            val y = pointsY[index].toDouble()
+            sumX += x
+            sumY += y
+            sumXX += x * x
+            sumXY += x * y
+            sumYY += y * y
+        }
+        val meanX = sumX / count
+        val meanY = sumY / count
+        val varianceX = sumXX / count - meanX * meanX
+        val varianceY = sumYY / count - meanY * meanY
+        val covariance = sumXY / count - meanX * meanY
+        if (varianceX + varianceY < 1e-6) return null
+        val angle = 0.5 * kotlin.math.atan2(2.0 * covariance, varianceX - varianceY)
+        return Line(
+            originX = meanX.toFloat(),
+            originY = meanY.toFloat(),
+            directionX = kotlin.math.cos(angle).toFloat(),
+            directionY = kotlin.math.sin(angle).toFloat(),
+        )
+    }
+
+    private fun perpendicularDistance(x: Float, y: Float, line: Line): Float {
+        val dx = x - line.originX
+        val dy = y - line.originY
+        return abs(dx * line.directionY - dy * line.directionX)
+    }
+
     private fun isConvex(quad: FloatArray): Boolean {
         var sign = 0
         for (i in 0 until 4) {
@@ -508,5 +837,22 @@ internal class RectangleDetector {
 
         /** How far the refined quad's area may differ from the hull's before we distrust it. */
         const val MAX_AREA_DEVIATION = 0.2f
+
+        /** Source-resolution refinement is strictly local to the coarse side. */
+        const val MIN_SOURCE_SEARCH_RADIUS_PX = 5
+        const val SOURCE_SAMPLE_SPACING_PX = 8f
+        const val MIN_SOURCE_SIDE_SAMPLES = 8
+        const val MAX_SOURCE_SIDE_SAMPLES = 96
+        const val SOURCE_SIDE_START_FRACTION = 0.1f
+        const val SOURCE_STRIP_RADIUS_PX = 1
+        const val SOURCE_EDGE_SUPPORT_PX = 2
+        const val MIN_SOURCE_EDGE_CONTRAST = 8f
+        const val MIN_SOURCE_DIRECTION_AGREEMENT = 0.94f // cos(20 degrees)
+        const val MIN_SOURCE_INLIER_DISTANCE_PX = 1.5f
+        const val MAX_SOURCE_INLIER_DISTANCE_PX = 3.5f
+        const val SOURCE_INLIER_MULTIPLIER = 2.5f
+        const val MIN_SOURCE_INLIER_PERCENT = 60
+        const val MAX_SOURCE_AREA_DEVIATION = 0.2f
+        const val SOURCE_CORNER_MARGIN_PX = 4f
     }
 }

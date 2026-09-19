@@ -8,7 +8,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
-/** Renders the ARCore camera texture behind the transparent Unity overlay. */
+/** Renders the ARCore camera texture behind the transparent native GLB overlay. */
 internal class CameraBackgroundRenderer {
     private var program = 0
     private var textureId = 0

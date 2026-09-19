@@ -1,9 +1,28 @@
+# Gradle and Android build output
 .gradle/
 .gradle-user-home/
+.android-user-home/
 .kotlin/
+.inspect-filament/
+**/build/
+.cxx/
+.externalNativeBuild/
+
+# Android Studio and IntelliJ
 .idea/
-local.properties
-build/
-app/build/
 *.iml
 captures/
+
+# Machine-specific Android configuration and signing material
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# Mock server dependencies, logs, and local environment values
+mock-server/node_modules/
+mock-server/.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
