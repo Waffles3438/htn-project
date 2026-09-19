@@ -1,0 +1,6 @@
+<resources>
+    <color name="viewer_overlay">#CC101010</color>
+    <color name="viewer_accent">#80CBC4</color>
+    <color name="viewer_text">#FFFFFFFF</color>
+</resources>
+
