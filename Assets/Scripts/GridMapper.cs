@@ -32,8 +32,8 @@ public class GridMapper : MonoBehaviour
         Vector3 pos2 = GetPinWorldPosition("H5");
 
         // Visualize E5 to F5 gap bridge
-        Gizmos.color = Color.magenta;
-        Gizmos.DrawLine(pos1, pos2);
+        //Gizmos.color = Color.magenta;
+        //Gizmos.DrawLine(pos1, pos2);
 
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(pos1, gizmoRadius);
