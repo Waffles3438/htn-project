@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Circuit Lab · Breadboard to XR</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<body>
+<header><a href="/" class="brand"><span class="logo">⌁</span> Circuit Lab</a><span class="tag">BREADBOARD → XR</span><span id="connection" role="status">Connecting…</span></header>
+<main>
+<div class="intro"><div><p class="eyebrow">01 / CIRCUIT WORKSPACE</p><h1>From an idea to a working circuit.</h1><p>Describe your circuit. Find the parts. Give every lead a place.</p></div><div class="session"><label for="session">Shared session</label><input id="session" value="demo-button-led" pattern="[A-Za-z0-9_-]{1,64}" maxlength="64"><small>Use the same ID in Unity and Android.</small></div></div>
+<div class="workspace">
+<section class="panel controls" aria-labelledby="design-title"><div class="panel-heading"><span class="step">1</span><h2 id="design-title">Describe & select</h2></div>
+<label for="prompt">What would you like to build?</label><textarea id="prompt" rows="4" maxlength="1000">Turn on an LED when a button is pressed</textarea>
+<p class="hint">Supports a single red LED, always on or lit while a button is pressed.</p>
+<label for="board">Reference breadboard</label><select id="board"><option>Loading board…</option></select>
+<div class="inventory-title"><h3>Your parts kit</h3><span>Available quantity</span></div><div id="inventory"></div>
+<button class="primary" id="generate" disabled>Generate circuit <span>↗</span></button><button class="secondary" id="analyze" disabled>Identify parts only</button>
+<div class="offline"><p>Or explore a ready-made demo</p><div><button id="demo-button" disabled>Load button + LED demo</button><button id="demo-led" disabled>Load LED demo</button></div></div>
+</section>
+<section class="panel result" aria-labelledby="result-title"><div class="panel-heading"><span class="step">2</span><h2 id="result-title">Your board, mapped</h2><span id="source" class="pill">Ready for an idea</span></div>
+<div id="status" role="status" aria-live="polite">Choose your parts, then generate a circuit or load a demo.</div>
+<div class="board-top"><div><strong id="board-caption">Breadboard preview</strong><small>Top view · rows (+Z) → · columns (+X) ↓</small></div><label class="view-control" for="board-view">View<select id="board-view"><option value="circuit">Fit circuit</option><option value="full">Full board</option></select></label></div>
+<div id="preview" aria-label="Breadboard placement preview"></div>
+<div class="legend"><span><i class="red"></i>LED / supply</span><span><i class="amber"></i>Resistor / signal</span><span><i class="blue"></i>Button</span></div>
+<div id="parts"></div><div id="steps"></div>
+<div class="export"><button id="download" disabled>Download placement.json ↓</button><button id="copy" disabled>Copy JSON</button><button id="latest">Load last valid session</button></div>
+<details><summary>Placement JSON</summary><pre id="json">No circuit generated yet.</pre></details>
+<p class="footnote">Layout validation checks the modeled circuit. Hardware connectivity, button footprint, and prefab alignment still need a physical check.</p>
+</section>
+</div>
+<footer>HACKATHON BUILD / CIRCUIT API <span>From a sentence to a shared spatial lesson.</span></footer>
+</main></body></html>

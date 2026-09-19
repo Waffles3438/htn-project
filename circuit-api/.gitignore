@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+.env
+.env.*
+!.env.example
+data/
+handoff/
+.DS_Store

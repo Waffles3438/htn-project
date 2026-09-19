@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "sessionId": "demo-button-led",
+  "breadboardModel": "demo_breadboard_v1",
+  "title": "Simple LED",
+  "prompt": "Turn on a red LED",
+  "source": "fixture",
+  "generatedAt": "2026-09-19T00:00:00+00:00",
+  "breadboard": {
+    "model": "demo_breadboard_v1",
+    "holeMapVersion": "person2-9d81633",
+    "physicalVerified": false,
+    "coordinateFrame": {
+      "units": "meters",
+      "handedness": "left",
+      "originHole": "A1",
+      "xAxis": "A1 toward J1",
+      "yAxis": "out of board",
+      "zAxis": "A1 toward A63"
+    },
+    "calibrationReferences": [
+      {
+        "hole": "A1",
+        "position": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      {
+        "hole": "J1",
+        "position": {
+          "x": 0.02794,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      {
+        "hole": "A63",
+        "position": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.15748
+        }
+      }
+    ]
+  },
+  "requiredParts": [
+    {
+      "type": "power_supply",
+      "value": "5V",
+      "quantity": 1
+    },
+    {
+      "type": "led",
+      "value": "red",
+      "quantity": 1
+    },
+    {
+      "type": "resistor",
+      "value": "220ohm",
+      "quantity": 1
+    },
+    {
+      "type": "jumper_wire",
+      "value": "male-male",
+      "quantity": 2
+    }
+  ],
+  "components": [
+    {
+      "id": "led_1",
+      "type": "led",
+      "value": "red",
+      "assetId": "led_red_v1",
+      "terminals": [
+        {
+          "id": "anode",
+          "holeId": "A15",
+          "position": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.03556
+          }
+        },
+        {
+          "id": "cathode",
+          "holeId": "A16",
+          "position": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0381
+          }
+        }
+      ],
+      "position": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.03683
+      },
+      "rotation": {
+        "x": 0,
+        "y": -0.70710678,
+        "z": 0,
+        "w": 0.70710678
+      },
+      "buildStep": 1
+    },
+    {
+      "id": "resistor_1",
+      "type": "resistor",
+      "value": "220ohm",
+      "assetId": "resistor_220ohm_v1",
+      "terminals": [
+        {
+          "id": "a",
+          "holeId": "B12",
+          "position": {
+            "x": 0.00254,
+            "y": 0.0,
+            "z": 0.02794
+          }
+        },
+        {
+          "id": "b",
+          "holeId": "B15",
+          "position": {
+            "x": 0.00254,
+            "y": 0.0,
+            "z": 0.03556
+          }
+        }
+      ],
+      "position": {
+        "x": 0.00254,
+        "y": 0.0,
+        "z": 0.03175
+      },
+      "rotation": {
+        "x": 0,
+        "y": -0.70710678,
+        "z": 0,
+        "w": 0.70710678
+      },
+      "buildStep": 2
+    },
+    {
+      "id": "power_1",
+      "type": "power_supply",
+      "value": "5V",
+      "assetId": "power_supply_5v_v1",
+      "terminals": [
+        {
+          "id": "positive",
+          "holeId": "J1",
+          "position": {
+            "x": 0.02794,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "id": "negative",
+          "holeId": "J2",
+          "position": {
+            "x": 0.02794,
+            "y": 0.0,
+            "z": 0.00254
+          }
+        }
+      ],
+      "position": {
+        "x": 0.02794,
+        "y": 0.0,
+        "z": 0.00127
+      },
+      "rotation": {
+        "x": 0,
+        "y": -0.70710678,
+        "z": 0,
+        "w": 0.70710678
+      },
+      "buildStep": 5
+    }
+  ],
+  "jumperWires": [
+    {
+      "id": "wire_1",
+      "fromHole": "I1",
+      "toHole": "C12",
+      "color": "red",
+      "buildStep": 3,
+      "startPosition": {
+        "x": 0.0254,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "endPosition": {
+        "x": 0.00508,
+        "y": 0.0,
+        "z": 0.02794
+      }
+    },
+    {
+      "id": "wire_3",
+      "fromHole": "C16",
+      "toHole": "I2",
+      "color": "black",
+      "buildStep": 4,
+      "startPosition": {
+        "x": 0.00508,
+        "y": 0.0,
+        "z": 0.0381
+      },
+      "endPosition": {
+        "x": 0.0254,
+        "y": 0.0,
+        "z": 0.00254
+      }
+    }
+  ],
+  "validation": {
+    "valid": true,
+    "checks": [
+      "schema",
+      "inventory",
+      "known_holes",
+      "unique_leads",
+      "reference_footprints",
+      "power_connected_last",
+      "no_supply_short_in_either_button_state",
+      "forward_led_with_series_220ohm",
+      "requested_button_behavior"
+    ],
+    "warnings": [
+      "Geometry comes from person2 commit 9d81633. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs."
+    ]
+  },
+  "instructions": [
+    {
+      "step": 1,
+      "componentIds": [
+        "led_1"
+      ],
+      "text": "With power disconnected, place led (red): anode \u2192 A15, cathode \u2192 A16. The long lead is normally the anode; verify the flat side/short lead is the cathode."
+    },
+    {
+      "step": 2,
+      "componentIds": [
+        "resistor_1"
+      ],
+      "text": "With power disconnected, place resistor (220ohm): a \u2192 B12, b \u2192 B15."
+    },
+    {
+      "step": 3,
+      "componentIds": [
+        "wire_1"
+      ],
+      "text": "With power disconnected, connect the red jumper from I1 to C12."
+    },
+    {
+      "step": 4,
+      "componentIds": [
+        "wire_3"
+      ],
+      "text": "With power disconnected, connect the black jumper from C16 to I2."
+    },
+    {
+      "step": 5,
+      "componentIds": [
+        "power_1"
+      ],
+      "text": "After checking the full circuit, connect the external 5 V source last: positive \u2192 J1, negative \u2192 J2."
+    }
+  ]
+}
