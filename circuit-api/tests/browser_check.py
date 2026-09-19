@@ -25,11 +25,15 @@ def check():
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto("http://127.0.0.1:%s" % server.server_port)
+            page.wait_for_selector("#demo-button", state="attached")
             page.wait_for_function("() => !document.getElementById('demo-button').disabled")
-            assert page.locator("#preview svg").count() == 1
+            # The redesigned page opens into a focused empty state; demo/parts controls live in Advanced options.
+            page.locator("#advanced summary").click()
             for button in ("demo-button", "demo-led", "demo-arduino"):
                 page.locator("#" + button).click()
+                page.wait_for_selector("#download", state="attached")
                 page.wait_for_function("() => !document.getElementById('download').disabled")
+                assert page.locator("#preview svg").count() == 1
                 assert "circuit checks passed" in page.locator("#status").inner_text()
                 data = json.loads(page.locator("#json").text_content())
                 assert data["breadboard"]["holeMapVersion"] == "person2-9d81633+rails1"
@@ -69,13 +73,13 @@ def check():
             page.locator("#preview").evaluate("e => e.scrollTop = 0")
             page.locator("#board-view").select_option("circuit")
             # Neither end of rail segment A is in this crop: stripes must still span visible holes.
-            page.evaluate("""() => draw({components:[],jumperWires:[],externalConnections:[{
-                id:'crop-test',pin:'D13',holeId:'J16',boardPosition:board.holes.find(h=>h.id==='J16').position
+            page.evaluate("""() => __circuit.show({components:[],jumperWires:[],externalConnections:[{
+                id:'crop-test',pin:'D13',holeId:'J16',boardPosition:__circuit.board.holes.find(h=>h.id==='J16').position
             }]})""")
             assert page.locator("[data-rail]").count() == 4
             for stripe in page.locator("[data-rail]").all():
                 assert float(stripe.get_attribute("y2")) - float(stripe.get_attribute("y1")) > 16
-            page.evaluate("draw(current)")
+            page.evaluate("() => __circuit.restore()")
             # Failed requests retain the previous circuit rather than silently loading another one.
             previous = page.locator("#json").text_content()
             page.locator("#qty-0").fill("0")

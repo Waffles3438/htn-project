@@ -11,6 +11,12 @@ from circuit.service import CircuitService
 from circuit.provider import provider_settings
 from circuit.validation import CircuitError
 
+MIME_TYPES = {
+    ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
+    ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json",
+    ".png": "image/png", ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain",
+}
+
 
 def load_env():
     path = ROOT / ".env"
@@ -27,6 +33,28 @@ def create_server(host="127.0.0.1", port=8000, service=None):
     generation_slot = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
+        def serve_static(self, path):
+            """Serve the built React app (web/dist) when present, else the legacy static/ page."""
+            dist = ROOT / "web" / "dist"
+            if (dist / "index.html").is_file():
+                if path == "/":
+                    self.reply(200, (dist / "index.html").read_bytes(), "text/html; charset=utf-8")
+                    return True
+                candidate = (dist / path.lstrip("/")).resolve()
+                if candidate.is_file() and str(candidate).startswith(str(dist.resolve()) + os.sep):
+                    kind = MIME_TYPES.get(candidate.suffix)
+                    if kind:
+                        charset = "; charset=utf-8" if kind.startswith("text/") or kind == "application/json" else ""
+                        self.reply(200, candidate.read_bytes(), kind + charset)
+                        return True
+                return False
+            static = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css")}
+            if path in static:
+                name, kind = static[path]
+                self.reply(200, (ROOT / "static" / name).read_bytes(), kind + "; charset=utf-8")
+                return True
+            return False
+
         def reply(self, status, body, content_type="application/json; charset=utf-8"):
             encoded = json.dumps(body, allow_nan=False).encode() if not isinstance(body, bytes) else body
             self.send_response(status)
@@ -44,10 +72,8 @@ def create_server(host="127.0.0.1", port=8000, service=None):
         def do_GET(self):
             path = urlparse(self.path).path
             try:
-                static = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css")}
-                if path in static:
-                    name, kind = static[path]
-                    return self.reply(200, (ROOT / "static" / name).read_bytes(), kind + "; charset=utf-8")
+                if self.serve_static(path):
+                    return None
                 if path == "/api/health":
                     return self.reply(200, {"ok": True, **provider_settings(), "breadboardModel": MODEL})
                 if path == "/api/kit":

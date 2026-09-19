@@ -4,9 +4,10 @@ Single handoff doc for design, planning, and implementation of the circuit websi
 
 ## Stack rules
 
-- Web app. All frontend/UI work uses the project's existing stack: plain HTML/CSS/JS under `static/` (`index.html`, `app.js`, `style.css`), no build step. The source constraints doc specifies TypeScript + React/TSX for React projects; here the binding rule is **extend what exists** — inspect `static/` conventions first, reuse its state/styling patterns, and introduce no new framework (no React/TS/Vite).
-- Never add Python for UI rendering, layout math, component definitions, or state. Python's role is the existing backend only, which already returns a structured JSON circuit model the browser renders. No backend image generation: generate circuit JSON, then let the website and Unity/XR each render it independently.
+- Web app. The frontend is a Vite + React + TypeScript SPA under `web/` (decided 2026-09-19, superseding the vanilla-JS `static/` page, which remains as a fallback served only when `web/dist/` is absent). Extend the existing React patterns in `web/src`; no new frameworks or UI libraries; plain CSS in `web/src/styles.css` keeps the warm off-white/dark-green identity.
+- Never add Python for UI rendering, layout math, component definitions, or state. Python's role is the existing backend only, which returns the structured JSON circuit model the browser renders. No backend image generation: generate circuit JSON, then let the website and Unity/XR each render it independently.
 - Keep the placement JSON serializable and shape-stable so the Unity/XR client consumes the same model.
+- Dev: `cd web && npm run dev` (Vite proxies `/api` to `server.py` on port 8000). Production: `npm run build` (runs `tsc --noEmit` first) then `server.py`, which serves `web/dist/` with path-traversal-safe static handling.
 
 ## Backend / LLM
 
@@ -29,14 +30,15 @@ Single handoff doc for design, planning, and implementation of the circuit websi
 
 ## Current UI (verified)
 
-- Single page. Left "Circuit" panel: prompt, capability hint line, board select, permanent parts-kit quantity rows, Generate/Identify-parts buttons, ready-made circuits. Right "Layout" panel: status banner, view select (Fit circuit/Full board), SVG preview, legend, parts chips, connections grid, rail explainer note, firmware sketch, assembly steps, JSON export, safety footnote. Session input sits in the header beside the title.
-- `app.js` draws the SVG from the hole map: one uniform X/Z scale, hole dots with `id · net` tooltips, rail stripes per segment with +/− marks, quadratic jumper-wire paths, LED/resistor/button bodies (sizes schematic, not hardware measurements; supply invisible), focus highlighting that dims unrelated items, callout label gutter; connection rows and steps drive highlighting. The external Uno exists only as text ("Uno D13 → J8" callouts/rows); no Uno body is rendered.
+- React app under `web/src` (`App.tsx` holds state; components in `web/src/components/`). Pre-generation: centered hero with prompt, Generate directly below, collapsed Advanced options (parts quantities, breadboard, identify-parts-only, ready-made circuits), clickable example prompts, de-emphasized XR session row. Post-generation: sidebar + dominant workspace with status banner, validation details, session row, canvas, compact BOM, numbered connections, firmware sketch, step mode (Previous/Next), JSON export.
+- `CircuitScene` draws the SVG from the hole map: one uniform X/Z scale, hole dots with `id · net` tooltips, rail stripes per segment with +/− marks, quadratic jumper-wire paths, LED/resistor/button bodies (sizes schematic, not hardware measurements), floating zoom/pan/Fit controls, focus highlighting that dims unrelated items, callout labels on selection. The external Uno renders beside the board (outline, USB, header, used-pin labels, wires from pins to holes) — display-only pose; Unity measures its own anchor.
+- DOM contracts kept for `tests/browser_check.py`: element ids, `.selected`/`.error` classes, `data-hole`/`data-rail` attributes, and the `window.__circuit` hook (`show`/`restore`) for scene-only swaps.
 - Page API: `/api/health`, `/api/kit`, `/api/breadboards/:model`, `/api/circuits/generate`, `/api/circuits/analyze`, `/api/circuits/demo/{button_led,led,arduino_led}`, `/api/sessions/:id/placement`. Session ID links saved layouts to XR polling.
 - Preserve: safety guidance and footnote (polarity, pin spacing, "wiring guide, not a physical fit certification"), map-version rejection, responsive scrolling, direct copy without hackathon/AI slogans.
 
 ## UI redesign — prompt-to-breadboard experience
 
-Goal: a polished, beginner-first electronics design tool (Fritzing/Tinkercad-like clarity), not a configuration form. A new user types one sentence and gets a built, checkable circuit; advanced users can override via collapsed options. Keep the existing warm off-white/dark-green identity (Inter + mono accents, thin borders, small radii, green primary); no dark/neon/gradient/Material restyle; use spacing and typography for hierarchy instead of cards inside cards.
+Goal: a polished, beginner-first electronics design tool (Fritzing/Tinkercad-like clarity), not a configuration form. A new user types one sentence and gets a built, checkable circuit; advanced users can override via collapsed options. Keep the existing warm off-white/dark-green identity (Inter + mono accents, thin borders, small radii, green primary); no dark/neon/gradient/Material restyle; use spacing and typography for hierarchy instead of cards inside cards. High-priority items are implemented in `web/`; breadboard-mounted controllers and non-Uno MCU support remain future work (the server supports the external Uno only).
 
 Flow and hierarchy
 - "Build a circuit" block first: prompt textarea with a capability placeholder (keep examples within actually supported scope, e.g. "Use an Arduino Uno and a button to turn on an LED"), Generate button immediately below (≤12–16px), no scrolling through part controls before it.
@@ -66,11 +68,12 @@ Responsive: wide = sidebar + dominant workspace; narrow stacks prompt / Generate
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
+cd web && npm run build && cd ..
 .venv/bin/python -m circuit.export
 git diff --check
 ```
 
-Optional browser check: install Playwright separately and run `BROWSER_EXECUTABLE=/path/to/chromium python tests/browser_check.py` (isolated temporary sessions, no paid provider calls; screenshots `/tmp/circuit-*.png`). Export regenerates schemas/fixture pairs plus the ignored `handoff/board-hole-map.meters.json` and `handoff/circuit-api-to-unity.zip` (this context, both Unity docs, placement schema, all three placement fixtures, board map, board assets). Generated files must match code — never hand-edit them. A local ZIP is not proof it was sent.
+Optional browser check: install Playwright separately and run `BROWSER_EXECUTABLE=/path/to/chromium python tests/browser_check.py` (isolated temporary sessions, no paid provider calls; screenshots `/tmp/circuit-*.png`). It drives the built React app when `web/dist/` exists, else the legacy page. Export regenerates schemas/fixture pairs plus the ignored `handoff/board-hole-map.meters.json` and `handoff/circuit-api-to-unity.zip` (this context, both Unity docs, placement schema, all three placement fixtures, board map, board assets). Generated files must match code — never hand-edit them. A local ZIP is not proof it was sent.
 
 ## Still requires hardware / Unity acceptance
 
