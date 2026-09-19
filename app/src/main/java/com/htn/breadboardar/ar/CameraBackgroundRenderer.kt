@@ -2,6 +2,7 @@ package com.htn.breadboardar.ar
 
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import com.google.ar.core.Coordinates2d
 import com.google.ar.core.Frame
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -15,19 +16,19 @@ internal class CameraBackgroundRenderer {
     private var texCoordAttribute = 0
     private var textureUniform = 0
 
+    /**
+     * Full-screen quad in OpenGL normalized device coordinates. ARCore maps these
+     * straight to camera texture coordinates, so the same buffer drives geometry
+     * and the UV lookup.
+     */
     private val quadVertices = floatBufferOf(floatArrayOf(
         -1f, -1f,
         1f, -1f,
         -1f, 1f,
         1f, 1f,
     ))
-    private val cameraTexCoords = floatBufferOf(floatArrayOf(
-        0f, 1f,
-        1f, 1f,
-        0f, 0f,
-        1f, 0f,
-    ))
     private val transformedTexCoords = floatBufferOf(FloatArray(8))
+    private var hasCameraUvTransform = false
 
     fun createOnGlThread(): Int {
         textureId = createExternalTexture()
@@ -35,19 +36,31 @@ internal class CameraBackgroundRenderer {
         positionAttribute = GLES20.glGetAttribLocation(program, "a_Position")
         texCoordAttribute = GLES20.glGetAttribLocation(program, "a_TexCoord")
         textureUniform = GLES20.glGetUniformLocation(program, "u_CameraTexture")
-        cameraTexCoords.rewind()
-        transformedTexCoords.put(cameraTexCoords)
-        transformedTexCoords.rewind()
+        hasCameraUvTransform = false
         return textureId
     }
 
     fun draw(frame: Frame) {
         if (frame.timestamp == 0L) return
 
-        if (frame.hasDisplayGeometryChanged()) {
-            cameraTexCoords.rewind()
+        // The first ARCore frame is not guaranteed to report a geometry change.
+        // Transform once unconditionally, then whenever the display changes, so
+        // the raw landscape camera texture is never drawn in a portrait UI.
+        //
+        // Both buffers must be rewound on every call: transformCoordinates2d
+        // compares remaining() on input and output and throws
+        // "Buffer sizes do not match" if either is already drained.
+        if (!hasCameraUvTransform || frame.hasDisplayGeometryChanged()) {
+            quadVertices.rewind()
             transformedTexCoords.rewind()
-            frame.transformDisplayUvCoords(cameraTexCoords, transformedTexCoords)
+            frame.transformCoordinates2d(
+                Coordinates2d.OPENGL_NORMALIZED_DEVICE_COORDINATES,
+                quadVertices,
+                Coordinates2d.TEXTURE_NORMALIZED,
+                transformedTexCoords,
+            )
+            hasCameraUvTransform = true
+            quadVertices.rewind()
             transformedTexCoords.rewind()
         }
 

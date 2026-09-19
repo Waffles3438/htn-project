@@ -30,7 +30,9 @@ Sent once after the student taps the breadboard origin, positive X reference, an
     "originMeters": [0.0, 0.0, 0.0],
     "xAxis": [1.0, 0.0, 0.0],
     "yAxis": [0.0, 1.0, 0.0],
-    "zAxis": [0.0, 0.0, 1.0]
+    "zAxis": [0.0, 0.0, 1.0],
+    "xExtentMeters": 0.166,
+    "yExtentMeters": 0.055
   }
 }
 ```
@@ -82,4 +84,3 @@ Send only the newest frame. Begin at 6–10 FPS and reduce PNG resolution if loc
   "message": "Unity placement loaded"
 }
 ```
-

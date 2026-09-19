@@ -86,8 +86,28 @@ class LaptopSocket(
                         .put("originMeters", array(calibration.originMeters))
                         .put("xAxis", array(calibration.xAxis))
                         .put("yAxis", array(calibration.yAxis))
-                        .put("zAxis", array(calibration.zAxis)),
+                        .put("zAxis", array(calibration.zAxis))
+                        .put("xExtentMeters", calibration.xExtentMeters)
+                        .put("yExtentMeters", calibration.yExtentMeters),
                 ),
+        )
+    }
+
+    /**
+     * Board pose relative to the camera, solved from each frame's image.
+     *
+     * Sent alongside the world-space `calibration` message rather than replacing it.
+     * Unity can use whichever it trusts: this one needs no ARCore world tracking, so
+     * it stays correct even when that tracking has diverged.
+     */
+    fun sendBoardPoseInCamera(translation: FloatArray, quaternion: FloatArray) {
+        send(
+            JSONObject()
+                .put("type", "board_pose_camera")
+                .put("sessionId", sessionId)
+                .put("coordinateSystem", "ARCore camera space, meters, right-handed, -Z forward")
+                .put("translationMeters", array(translation))
+                .put("rotationQuaternion", array(quaternion)),
         )
     }
 
