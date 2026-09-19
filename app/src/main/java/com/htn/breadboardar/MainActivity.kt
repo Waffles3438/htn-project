@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.PointF
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -45,6 +46,10 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
     private var activeCalibration: BoardCalibration? = null
     private var pendingCalibrationTap: PointF? = null
     private var userRequestedArInstall = true
+    private var baseStatus = ""
+    private var trackingHint: String? = null
+    private var selectedBoardCorners: List<PointF>? = null
+    private var boardFitPx = 0
 
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -59,6 +64,11 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // The viewer is watched continuously while the learner builds the circuit, so
+        // the screen must not blank. This is also a stability requirement: letting the
+        // device doze starves ARCore's IMU feed, which made its native motion-stereo
+        // depth thread abort and take the process with it.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         preview = findViewById(R.id.ar_preview)
         overlay = findViewById(R.id.calibration_overlay)
@@ -74,6 +84,10 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
             override fun onCalibrationTap(x: Float, y: Float) {
                 pendingCalibrationTap = PointF(x, y)
                 preview.requestCalibrationTap(x, y)
+            }
+
+            override fun onRectangleSelected(index: Int, corners: List<PointF>) {
+                selectBreadboardRectangle(index, corners)
             }
         }
 
@@ -95,6 +109,7 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
     }
 
     override fun onDestroy() {
+        preview.release()
         laptopSocket.close()
         arSession?.close()
         super.onDestroy()
@@ -117,6 +132,8 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
             } else {
                 activeCalibration = calibration
                 overlay.endCalibration()
+                preview.setCalibrationActive(false)
+                preview.setBoardOutline(calibration)
                 laptopSocket.sendCalibration(calibration)
                 showStatus("Calibrated. Waiting for Unity overlay frames.")
             }
@@ -129,6 +146,65 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
     override fun onArError(message: String) {
         pendingCalibrationTap = null
         showStatus(message)
+    }
+
+    override fun onTrackingHint(message: String?) {
+        trackingHint = message
+        renderStatus()
+    }
+
+    override fun onSurfaceTargets(targets: List<PointF>) {
+        overlay.showSurfaceTargets(targets)
+    }
+
+    override fun onBoardOutline(outline: List<PointF>) {
+        overlay.showBoardOutline(outline)
+    }
+
+    override fun onCandidateRectangles(rectangles: List<List<PointF>>) {
+        overlay.showCandidateRectangles(rectangles)
+    }
+
+    private fun selectBreadboardRectangle(index: Int, corners: List<PointF>) {
+        selectedBoardCorners = corners
+        overlay.lockSelectedRectangle(corners)
+        preview.setRectangleDetectionActive(false)
+        preview.setCalibrationActive(false)
+        preview.selectRectangle(index)
+        showStatus("Working out the board position, hold the phone steady.")
+    }
+
+    override fun onBoardTracked(reprojectionErrorPx: Float) {
+        overlay.clearSelectedRectangle()
+        boardFitPx = reprojectionErrorPx.toInt()
+        showStatus("Board locked (fit ${boardFitPx}px). Keep the whole board in view.")
+    }
+
+    override fun onBoardVisibility(visible: Boolean) {
+        showStatus(
+            if (visible) {
+                "Board locked (fit ${boardFitPx}px). Keep the whole board in view."
+            } else {
+                "Board out of view. The overlay is hidden rather than left at a stale position. " +
+                    "Bring the whole board back into frame."
+            },
+        )
+    }
+
+    override fun onBoardPoseInCamera(translation: FloatArray, quaternion: FloatArray) {
+        if (socketConnected) laptopSocket.sendBoardPoseInCamera(translation, quaternion)
+    }
+
+    override fun onBoardCalibrated(calibration: BoardCalibration) {
+        val isFirst = activeCalibration == null
+        activeCalibration = calibration
+        // The yellow outline is drawn from the anchor every frame, so if it stays on
+        // the real board as you move, the pose is right.
+        overlay.clearSelectedRectangle()
+        if (socketConnected) laptopSocket.sendCalibration(calibration)
+        if (isFirst) {
+            showStatus("Board anchored. The yellow outline should stay on the breadboard as you move.")
+        }
     }
 
     override fun onSocketStatus(message: String, connected: Boolean) {
@@ -168,13 +244,21 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
         activeCalibration = null
         pendingCalibrationTap = null
         calibrator.reset()
+        selectedBoardCorners = null
+        preview.clearBoardOutline()
+        preview.setCalibrationActive(true)
+        preview.setRectangleDetectionActive(true)
         overlay.beginCalibration()
-        showStatus("Tap the board origin, then an X-direction point, then a Y-direction point.")
+        showStatus("Tap the outlined rectangle that is your breadboard.")
     }
 
     private fun resetCalibration(message: String) {
         activeCalibration = null
         calibrator.reset()
+        selectedBoardCorners = null
+        preview.clearBoardOutline()
+        preview.setCalibrationActive(false)
+        preview.setRectangleDetectionActive(false)
         overlay.resetCalibration()
         showStatus(message)
     }
@@ -227,6 +311,13 @@ class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, LaptopSocket
     }
 
     private fun showStatus(message: String) {
-        statusText.text = message
+        baseStatus = message
+        renderStatus()
+    }
+
+    /** The AR tracking hint sits above whatever step the user is on, never replacing it. */
+    private fun renderStatus() {
+        val hint = trackingHint
+        statusText.text = if (hint.isNullOrBlank()) baseStatus else "$hint\n$baseStatus"
     }
 }

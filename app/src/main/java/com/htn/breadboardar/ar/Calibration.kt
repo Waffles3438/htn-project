@@ -8,6 +8,8 @@ data class BoardCalibration(
     val xAxis: FloatArray,
     val yAxis: FloatArray,
     val zAxis: FloatArray,
+    val xExtentMeters: Float,
+    val yExtentMeters: Float,
 )
 
 /**
@@ -30,8 +32,12 @@ class ThreePointCalibrator {
 
     private fun buildCalibration(): BoardCalibration {
         val origin = points[0]
-        val xAxis = normalize(subtract(points[1], origin))
-        val yReference = normalize(subtract(points[2], origin))
+        val xOffset = subtract(points[1], origin)
+        val yOffset = subtract(points[2], origin)
+        val xExtent = length(xOffset)
+        val yExtent = length(yOffset)
+        val xAxis = normalize(xOffset)
+        val yReference = normalize(yOffset)
         val zAxis = normalize(cross(xAxis, yReference))
 
         require(length(zAxis) > 0.001f) {
@@ -39,7 +45,14 @@ class ThreePointCalibrator {
         }
 
         val yAxis = normalize(cross(zAxis, xAxis))
-        return BoardCalibration(origin.copyOf(), xAxis, yAxis, zAxis)
+        return BoardCalibration(
+            originMeters = origin.copyOf(),
+            xAxis = xAxis,
+            yAxis = yAxis,
+            zAxis = zAxis,
+            xExtentMeters = xExtent,
+            yExtentMeters = yExtent,
+        )
     }
 
     private fun subtract(a: FloatArray, b: FloatArray) = floatArrayOf(
@@ -75,4 +88,3 @@ data class CameraState(
     val viewportWidth: Int,
     val viewportHeight: Int,
 )
-

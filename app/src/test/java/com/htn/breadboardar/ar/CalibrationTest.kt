@@ -17,7 +17,8 @@ class CalibrationTest {
         assertArrayEquals(floatArrayOf(1f, 0f, 0f), calibration.xAxis, 0.0001f)
         assertArrayEquals(floatArrayOf(0f, 1f, 0f), calibration.yAxis, 0.0001f)
         assertArrayEquals(floatArrayOf(0f, 0f, 1f), calibration.zAxis, 0.0001f)
+        assertEquals(1f, calibration.xExtentMeters, 0.0001f)
+        assertEquals(1f, calibration.yExtentMeters, 0.0001f)
         assertEquals(3, calibrator.pointCount)
     }
 }
-
