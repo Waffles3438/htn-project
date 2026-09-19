@@ -165,12 +165,37 @@ class LayoutTests(unittest.TestCase):
             validate_request(self.request)
         self.assertEqual(caught.exception.code, "UNSUPPORTED_PART")
 
-    def test_pose_pivot_and_rotation(self):
+    def test_semantic_mounts_nets_and_no_geometry(self):
         p = make_placement(self.request, self.plan, self.draft, "fixture")
         led = p["components"][0]
-        self.assertAlmostEqual(led["position"]["z"], (.03556+.0381)/2)
-        self.assertAlmostEqual(led["rotation"]["y"], -2**-.5)
+        self.assertEqual(led["mount"], {"type": "breadboard", "board": "BB1",
+                                        "terminals": {"anode": "BB1:A15", "cathode": "BB1:A16"}})
         self.assertEqual(led["assetId"], "led_red_v1")
+        self.assertNotIn("position", led)
+        self.assertNotIn("rotation", led)
+        for wire in p["jumperWires"]:
+            self.assertNotIn("startPosition", wire)
+            self.assertNotIn("endPosition", wire)
+            self.assertTrue(wire["from"].startswith("BB1:") and wire["to"].startswith("BB1:"))
+        names = {n["id"] for n in p["nets"]}
+        self.assertEqual(names, {"VCC", "GND", "LED_SIGNAL", "BUTTON_SIGNAL"})
+        gnd = next(n for n in p["nets"] if n["id"] == "GND")
+        self.assertEqual(gnd["members"], ["led_1:cathode", "power_1:negative"])
+        vcc = next(n for n in p["nets"] if n["id"] == "VCC")
+        self.assertEqual(vcc["members"], ["button_1:a1", "button_1:a2", "power_1:positive"])
+
+
+class AddressTests(unittest.TestCase):
+    def test_board_address_round_trip(self):
+        from circuit.addresses import endpoint_parts, hole_address, hole_from_address
+        self.assertEqual(hole_from_address("BB1:A15"), "A15")
+        self.assertEqual(hole_from_address("BB1:RAIL:L:+:A:12"), "L+A12")
+        self.assertEqual(hole_address("A1"), "BB1:A1")
+        self.assertIsNone(hole_from_address("BB1:RAIL:L:+:A:26"))
+        self.assertIsNone(hole_from_address("BB1:Z15"))
+        self.assertIsNone(hole_from_address("led_1:anode"))
+        self.assertEqual(endpoint_parts("led_1:anode"), ("led_1", "anode"))
+        self.assertIsNone(endpoint_parts("BB1:A15"))
 
 
 class ProviderTests(unittest.TestCase):

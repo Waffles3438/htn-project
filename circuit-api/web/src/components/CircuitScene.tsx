@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { BoardMap, Placement } from '../types/circuit'
-import { partNames, pinNames, schematicColors } from '../lib/names'
+import type { BoardMap, CircuitComponent, Placement } from '../types/circuit'
+import { endpointLabel, partNames, pinNames, schematicColors, terminalOrder } from '../lib/names'
+import { addressToHole, endpointParts } from '../lib/addresses'
 
 const PITCH = 0.00254
 const SCALE = 7500
 const MARGIN = 40
 
-// Display-only Uno pose and size (53.4 × 68.6 mm at canvas scale). The placement marks the
-// Uno `separate_anchor_required` — Unity measures its own anchor — so the canvas picks a
-// stable spot beside the board and never touches hole geometry.
+// Display-only Uno size (53.4 × 68.6 mm at canvas scale). The placement carries a
+// semantic external mount (relativeTo + side); the canvas derives a stable spot from
+// it and never touches hole geometry. Unity derives its own pose the same way.
 const UNO_W = 0.0534 * SCALE
 const UNO_H = 0.0686 * SCALE
 const UNO_GAP = 56
-const PIN_ANCHOR: Record<string, number> = { D13: 0.2, GND: 0.3, '5V': 0.4 }
+const PIN_ANCHOR: Record<string, number> = { D13: 0.2, GND: 0.3, '5V': 0.4, '3V3': 0.1 }
 
 interface SceneProps {
   board: BoardMap
@@ -30,6 +31,20 @@ interface Callout {
   labelY: number
   label: string
   detail: string
+}
+
+interface Point {
+  x: number
+  y: number
+  pin?: string
+}
+
+function mountedHoles(component: CircuitComponent): { terminal: string; hole: string }[] {
+  const mount = component.mount
+  if (mount.type !== 'breadboard') return []
+  return terminalOrder[component.type]
+    .map((terminal) => ({ terminal, hole: addressToHole(mount.terminals[terminal] ?? '') ?? '' }))
+    .filter((entry) => entry.hole !== '')
 }
 
 export function CircuitScene({ board, placement, selectedIds, view, onViewChange }: SceneProps) {
@@ -49,15 +64,23 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
     return () => svg.removeEventListener('wheel', onWheel)
   }, [])
 
-  const devices = placement?.externalDevices ?? []
-  const external = placement?.externalConnections ?? []
-  const uno = devices.length > 0
+  const device = placement?.externalDevices?.[0]
+  const uno = device?.mount.type === 'external' ? device : null
+  const unoSide = uno?.mount.side ?? 'left'
   const hasSelection = selectedIds.length > 0
 
   const used = [
-    ...(placement?.components ?? []).flatMap((c) => c.terminals.map((t) => t.position)),
-    ...(placement?.jumperWires ?? []).flatMap((w) => [w.startPosition, w.endPosition]),
-    ...external.map((c) => c.boardPosition),
+    ...(placement?.components ?? []).flatMap((c) =>
+      mountedHoles(c)
+        .map((entry) => board.holes.find((h) => h.id === entry.hole)?.position)
+        .filter((p): p is NonNullable<typeof p> => Boolean(p)),
+    ),
+    ...(placement?.jumperWires ?? []).flatMap((w) =>
+      [w.from, w.to]
+        .map((endpoint) => addressToHole(endpoint))
+        .map((hole) => (hole ? board.holes.find((h) => h.id === hole)?.position : undefined))
+        .filter((p): p is NonNullable<typeof p> => Boolean(p)),
+    ),
   ]
   const full = view === 'full'
   const minRow = full || !used.length ? 1 : Math.max(1, Math.floor(Math.min(...used.map((p) => p.z)) / PITCH) - 1)
@@ -68,23 +91,82 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
   // Width always spans the whole board (outer rail to outer rail) so the view does not jump between row ranges.
   const minX = Math.min(...board.holes.map((h) => h.position.x))
   const maxX = Math.max(...board.holes.map((h) => h.position.x))
-  const gutter = uno ? UNO_W + UNO_GAP : 0
+  // Content offset: the board shifts to make room for an external controller on one side.
+  const offsetX = unoSide === 'left' ? UNO_W + UNO_GAP : 0
+  const offsetY = unoSide === 'top' ? UNO_H + UNO_GAP : 0
   // One uniform scale preserves the actual reference hole geometry in both axes.
   const pt = (p: { x: number; z: number }): [number, number] => [
-    gutter + MARGIN + (p.x - minX) * SCALE,
-    MARGIN + (p.z - (minRow - 1) * PITCH) * SCALE,
+    offsetX + MARGIN + (p.x - minX) * SCALE,
+    offsetY + MARGIN + (p.z - (minRow - 1) * PITCH) * SCALE,
   ]
   const boardWidth = (maxX - minX) * SCALE + 2 * MARGIN
-  let height = (maxRow - minRow) * PITCH * SCALE + 2 * MARGIN
-  if (uno) height = Math.max(height, UNO_H + 16)
-  const unoTop = uno ? Math.max(8, Math.min(height - UNO_H - 8, height / 2 - UNO_H / 2)) : 0
-  const unoRight = uno ? MARGIN + gutter - UNO_GAP : 0
-  const unoLeft = unoRight - UNO_W
+  let boardHeight = (maxRow - minRow) * PITCH * SCALE + 2 * MARGIN
+
+  // Uno display rect from its semantic external mount side, before any endpoint resolves.
+  let unoX = 0
+  let unoY = 0
+  let extraBottom = 0
+  if (uno) {
+    if (unoSide === 'left') {
+      boardHeight = Math.max(boardHeight, UNO_H + 16)
+      unoX = MARGIN
+      unoY = Math.max(offsetY + 8, Math.min(offsetY + boardHeight - UNO_H - 8, offsetY + boardHeight / 2 - UNO_H / 2))
+    } else if (unoSide === 'right') {
+      boardHeight = Math.max(boardHeight, UNO_H + 16)
+      unoX = offsetX + MARGIN + boardWidth + UNO_GAP
+      unoY = Math.max(offsetY + 8, Math.min(offsetY + boardHeight - UNO_H - 8, offsetY + boardHeight / 2 - UNO_H / 2))
+    } else if (unoSide === 'top') {
+      unoX = offsetX + MARGIN + boardWidth / 2 - UNO_W / 2
+      unoY = MARGIN
+    } else {
+      unoX = offsetX + MARGIN + boardWidth / 2 - UNO_W / 2
+      unoY = offsetY + boardHeight + UNO_GAP
+      extraBottom = UNO_H + 8
+    }
+  }
+  const unoPinAnchor = (pin: string): Point => {
+    const fraction = PIN_ANCHOR[pin] ?? 0.5
+    if (unoSide === 'right') return { x: unoX + 15, y: unoY + UNO_H * fraction }
+    if (unoSide === 'top') return { x: unoX + UNO_W * fraction, y: unoY + UNO_H - 15 }
+    if (unoSide === 'bottom') return { x: unoX + UNO_W * fraction, y: unoY + 15 }
+    return { x: unoX + UNO_W - 15, y: unoY + UNO_H * fraction }
+  }
+
+  // Resolve a semantic endpoint to canvas coordinates. Board addresses resolve from the
+  // hole map; mounted terminals from their component's mount; controller pins from this
+  // scene's display layout of the external mount.
+  const resolveEndpoint = (endpoint: string): Point | null => {
+    const hole = addressToHole(endpoint)
+    if (hole) {
+      const target = board.holes.find((h) => h.id === hole)
+      if (!target) return null
+      const [x, y] = pt(target.position)
+      return { x, y }
+    }
+    const parts = endpointParts(endpoint)
+    if (!parts) return null
+    const [componentId, terminal] = parts
+    const component = placement?.components.find((c) => c.id === componentId)
+    if (component?.mount.type === 'breadboard') {
+      const hole = addressToHole(component.mount.terminals[terminal] ?? '')
+      const target = hole ? board.holes.find((h) => h.id === hole) : null
+      if (!target) return null
+      const [x, y] = pt(target.position)
+      return { x, y }
+    }
+    if (uno && uno.id === componentId) return { ...unoPinAnchor(terminal), pin: terminal }
+    return null
+  }
 
   const focused = new Set<string>([
-    ...(placement?.components ?? []).flatMap((c) => (selectedIds.includes(c.id) ? c.terminals.map((t) => t.holeId) : [])),
-    ...(placement?.jumperWires ?? []).flatMap((w) => (selectedIds.includes(w.id) ? [w.fromHole, w.toHole] : [])),
-    ...external.flatMap((c) => (selectedIds.includes(c.id) ? [c.holeId] : [])),
+    ...(placement?.components ?? []).flatMap((c) =>
+      selectedIds.includes(c.id) ? mountedHoles(c).map((entry) => entry.hole) : [],
+    ),
+    ...(placement?.jumperWires ?? []).flatMap((w) =>
+      selectedIds.includes(w.id)
+        ? [addressToHole(w.from), addressToHole(w.to)].filter((h): h is string => h !== null)
+        : [],
+    ),
   ])
   const focusedNets = new Set(board.holes.filter((h) => focused.has(h.id)).map((h) => h.net))
 
@@ -98,47 +180,51 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
     }
   }
 
-  const wires = (placement?.jumperWires ?? []).map((w) => {
-    const a = pt(w.startPosition)
-    const b = pt(w.endPosition)
-    return {
-      id: w.id,
-      color: schematicColors[w.color] ?? '#6d9450',
-      a,
-      b,
-      active: !hasSelection || selectedIds.includes(w.id),
-    }
-  })
+  const wires = (placement?.jumperWires ?? []).map((w) => ({
+    id: w.id,
+    color: schematicColors[w.color] ?? '#6d9450',
+    from: w.from,
+    to: w.to,
+    a: resolveEndpoint(w.from),
+    b: resolveEndpoint(w.to),
+    label: `${endpointLabel(w.from, placement)} → ${endpointLabel(w.to, placement)}`,
+    first: resolveEndpoint(w.from),
+    active: !hasSelection || selectedIds.includes(w.id),
+  }))
 
   const records = [
-    ...(placement?.components ?? []).map((c) => ({
-      id: c.id,
-      label: partNames[c.type] ?? c.type,
-      holes: c.terminals.map((t) => t.holeId),
-      point: c.position,
-    })),
-    ...(placement?.jumperWires ?? []).map((w) => ({
+    ...(placement?.components ?? []).map((c) => {
+      const holes = mountedHoles(c).map((entry) => entry.hole)
+      const points = holes
+        .map((hole) => board.holes.find((h) => h.id === hole))
+        .filter((h): h is NonNullable<typeof h> => Boolean(h))
+        .map((h) => pt(h.position))
+      const center = points.length
+        ? points.reduce<[number, number]>((sum, p) => [sum[0] + p[0] / points.length, sum[1] + p[1] / points.length], [0, 0])
+        : [0, 0]
+      return { id: c.id, label: partNames[c.type] ?? c.type, holes, point: { x: center[0], y: center[1] } }
+    }),
+    ...wires.map((w) => ({
       id: w.id,
-      label: `${w.fromHole} → ${w.toHole}`,
-      holes: [w.fromHole, w.toHole],
-      point: w.startPosition,
+      label: w.label,
+      holes: [w.from, w.to].map((e) => addressToHole(e)).filter((h): h is string => h !== null),
+      point: { x: w.first?.x ?? 0, y: w.first?.y ?? 0 },
     })),
-    ...external.map((c) => ({ id: c.id, label: `Uno ${c.pin} → ${c.holeId}`, holes: [c.holeId], point: c.boardPosition })),
   ]
-  const labelX = gutter + boardWidth + 8
-  let lastY = 15
+  const labelX = offsetX + boardWidth + 8
+  let lastY = offsetY + 15
   const callouts: Callout[] = records
     .filter((r) => selectedIds.includes(r.id))
-    .sort((a, b) => a.point.z - b.point.z)
+    .sort((a, b) => a.point.y - b.point.y)
     .map((r) => {
-      const [x, y] = pt(r.point)
-      const labelY = Math.max(y, lastY + 36)
+      const labelY = Math.max(r.point.y, lastY + 36)
       lastY = labelY
-      return { key: r.id, x, y, labelY, label: r.label, detail: r.holes.join(' · ') }
+      return { key: r.id, x: r.point.x, y: r.point.y, labelY, label: r.label, detail: r.holes.join(' · ') }
     })
 
-  const svgWidth = gutter + boardWidth + (callouts.length ? 200 : 24)
-  const svgHeight = Math.max(height, lastY + 28)
+  const svgWidth =
+    offsetX + boardWidth + (unoSide === 'right' ? UNO_W + UNO_GAP : 0) + (callouts.length ? 200 : 24)
+  const svgHeight = offsetY + boardHeight + extraBottom + (lastY + 28 > offsetY + boardHeight ? lastY + 28 - offsetY - boardHeight : 0)
   const e1 = board.holes.find((h) => h.id === 'E1')
   const f1 = board.holes.find((h) => h.id === 'F1')
 
@@ -188,13 +274,21 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
             onPointerLeave={onPointerUp}
           >
             <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-              <rect x={gutter + 8} y={8} width={boardWidth - 16} height={height - 16} rx={12} fill="#faf9f3" stroke="#d4d8cf" />
+              <rect
+                x={offsetX + 8}
+                y={offsetY + 8}
+                width={boardWidth - 16}
+                height={boardHeight - 16}
+                rx={12}
+                fill="#faf9f3"
+                stroke="#d4d8cf"
+              />
               {e1 && f1 && (
                 <rect
                   x={pt(e1.position)[0] + 9}
-                  y={24}
+                  y={offsetY + 24}
                   width={pt(f1.position)[0] - pt(e1.position)[0] - 18}
-                  height={height - 48}
+                  height={boardHeight - 48}
                   rx={5}
                   fill="#e4e7df"
                 />
@@ -220,7 +314,7 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
                   <text
                     key={prefix}
                     x={x}
-                    y={20}
+                    y={offsetY + 20}
                     textAnchor="middle"
                     fontSize={13}
                     fontWeight={700}
@@ -247,37 +341,45 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
                       <title>{`${h.id} · ${h.net}`}</title>
                     </circle>
                     {/^A\d+$/.test(h.id) && (
-                      <text x={gutter + 16} y={y + 3} fontSize={9} fill="#627263">
+                      <text x={offsetX + 16} y={y + 3} fontSize={9} fill="#627263">
                         {h.id.slice(1)}
                       </text>
                     )}
                     {new RegExp(`^[A-J]${minRow}$`).test(h.id) && (
-                      <text x={x} y={20} textAnchor="middle" fontSize={10} fill="#334e40">
+                      <text x={x} y={offsetY + 20} textAnchor="middle" fontSize={10} fill="#334e40">
                         {h.id[0]}
                       </text>
                     )}
                   </g>
                 )
               })}
-              {wires.map((w) => (
-                <g key={w.id}>
-                  <path
-                    d={`M ${w.a[0]} ${w.a[1]} Q ${(w.a[0] + w.b[0]) / 2 + 22} ${(w.a[1] + w.b[1]) / 2} ${w.b[0]} ${w.b[1]}`}
-                    fill="none"
-                    stroke={w.color}
-                    strokeWidth={w.active ? 3.5 : 2}
-                    opacity={w.active ? 1 : 0.22}
-                  />
-                  {[w.a, w.b].map((p, i) => (
-                    <circle key={i} cx={p[0]} cy={p[1]} r={3.5} fill={w.color} stroke="#fff" strokeWidth={1} />
-                  ))}
-                </g>
-              ))}
+              {wires.map((w) =>
+                w.a && w.b ? (
+                  <g key={w.id}>
+                    <path
+                      d={`M ${w.a.x} ${w.a.y} Q ${(w.a.x + w.b.x) / 2 + 22} ${(w.a.y + w.b.y) / 2} ${w.b.x} ${w.b.y}`}
+                      fill="none"
+                      stroke={w.color}
+                      strokeWidth={w.active ? 3.5 : 2}
+                      opacity={w.active ? 1 : 0.22}
+                    />
+                    {[w.a, w.b].map((p, i) => (
+                      <circle key={i} cx={p.x} cy={p.y} r={3.5} fill={w.color} stroke="#fff" strokeWidth={1} />
+                    ))}
+                  </g>
+                ) : null,
+              )}
               {(placement?.components ?? []).map((c) => {
                 const color = schematicColors[c.type] ?? '#6d9450'
-                const [x, y] = pt(c.position)
-                const points = c.terminals.map((t) => pt(t.position))
-                const [a, b] = points
+                const entries = mountedHoles(c)
+                const points = entries
+                  .map((entry) => board.holes.find((h) => h.id === entry.hole))
+                  .filter((h): h is NonNullable<typeof h> => Boolean(h))
+                  .map((h) => pt(h.position))
+                if (!points.length) return null
+                const x = points.reduce((sum, p) => sum + p[0], 0) / points.length
+                const y = points.reduce((sum, p) => sum + p[1], 0) / points.length
+                const [a, b] = [points[0], points[points.length - 1]]
                 const dimmed = hasSelection && !selectedIds.includes(c.id)
                 return (
                   <g key={c.id} opacity={dimmed ? 0.3 : 1}>
@@ -305,59 +407,84 @@ export function CircuitScene({ board, placement, selectedIds, view, onViewChange
                         )}
                       </>
                     )}
-                    {c.terminals.map((t, i) => (
-                      <circle key={t.id} cx={points[i][0]} cy={points[i][1]} r={3.5} fill={color} stroke="#fff" strokeWidth={1}>
-                        <title>{`${partNames[c.type] ?? c.type} · ${pinNames[t.id] ?? t.id} → ${t.holeId}`}</title>
-                      </circle>
-                    ))}
+                    {c.mount.type === 'breadboard' &&
+                      entries.map((entry, i) => (
+                        <circle
+                          key={entry.terminal}
+                          cx={points[i][0]}
+                          cy={points[i][1]}
+                          r={3.5}
+                          fill={color}
+                          stroke="#fff"
+                          strokeWidth={1}
+                        >
+                          <title>{`${partNames[c.type] ?? c.type} · ${pinNames[entry.terminal] ?? entry.terminal} → ${entry.hole}`}</title>
+                        </circle>
+                      ))}
                   </g>
                 )
               })}
               {uno && (
-                <g opacity={hasSelection && !external.some((c) => selectedIds.includes(c.id)) ? 0.35 : 1}>
-                  <rect x={unoLeft} y={unoTop} width={UNO_W} height={UNO_H} rx={10} fill="#57a3a5" stroke="#39706f" />
-                  <rect x={unoLeft + 6} y={unoTop + UNO_H * 0.16} width={30} height={46} rx={4} fill="#c8cfc9" stroke="#7d8a80" />
-                  <rect x={unoRight - 22} y={unoTop + 8} width={14} height={UNO_H * 0.55} rx={3} fill="#2c3530" />
-                  <rect x={unoLeft + 10} y={unoTop + UNO_H - 22} width={UNO_W * 0.45} height={14} rx={3} fill="#2c3530" />
-                  <text x={unoLeft + UNO_W * 0.44} y={unoTop + UNO_H * 0.55} textAnchor="middle" fontSize={17} fontWeight={700} fill="#eef4ee">
+                <g
+                  opacity={
+                    hasSelection && !wires.some((w) => w.active && (w.a?.pin || w.b?.pin)) ? 0.35 : 1
+                  }
+                >
+                  <rect x={unoX} y={unoY} width={UNO_W} height={UNO_H} rx={10} fill="#57a3a5" stroke="#39706f" />
+                  {unoSide === 'left' && (
+                    <rect x={unoX + 6} y={unoY + UNO_H * 0.16} width={30} height={46} rx={4} fill="#c8cfc9" stroke="#7d8a80" />
+                  )}
+                  {(unoSide === 'left' || unoSide === 'right') && (
+                    <rect
+                      x={unoSide === 'left' ? unoX + UNO_W - 22 : unoX + 8}
+                      y={unoY + 8}
+                      width={14}
+                      height={UNO_H * 0.55}
+                      rx={3}
+                      fill="#2c3530"
+                    />
+                  )}
+                  <rect x={unoX + 10} y={unoY + UNO_H - 22} width={UNO_W * 0.45} height={14} rx={3} fill="#2c3530" />
+                  <text x={unoX + UNO_W * 0.44} y={unoY + UNO_H * 0.55} textAnchor="middle" fontSize={17} fontWeight={700} fill="#eef4ee">
                     Arduino Uno
                   </text>
-                  <text x={unoLeft + UNO_W * 0.44} y={unoTop + UNO_H * 0.55 + 20} textAnchor="middle" fontSize={12} fill="#d3e4e2">
+                  <text x={unoX + UNO_W * 0.44} y={unoY + UNO_H * 0.55 + 20} textAnchor="middle" fontSize={12} fill="#d3e4e2">
                     R3 · ATmega328P
                   </text>
                 </g>
               )}
-              {uno &&
-                external.map((c) => {
-                  const anchorX = unoRight - 15
-                  const anchorY = unoTop + UNO_H * (PIN_ANCHOR[c.pin] ?? 0.5)
-                  const b = pt(c.boardPosition)
-                  const color = schematicColors[c.color] ?? '#6d9450'
-                  const active = !hasSelection || selectedIds.includes(c.id)
-                  return (
-                    <g key={c.id}>
-                      <circle cx={anchorX} cy={anchorY} r={4.5} fill={color} stroke="#fff" strokeWidth={1}>
-                        <title>{`Uno ${c.pin}`}</title>
-                      </circle>
-                      <text x={anchorX - 10} y={anchorY + 4} textAnchor="end" fontSize={12} fontWeight={700} fill="#254b39">
-                        {c.pin}
+              {wires.map((w) => {
+                const pinPoint = w.a?.pin ? w.a : w.b?.pin ? w.b : null
+                if (!pinPoint) return null
+                return (
+                  <g key={'pin-' + w.id}>
+                    <circle cx={pinPoint.x} cy={pinPoint.y} r={4.5} fill={w.color} stroke="#fff" strokeWidth={1}>
+                      <title>{`Uno ${pinPoint.pin}`}</title>
+                    </circle>
+                    {(unoSide === 'left' || unoSide === 'right') && (
+                      <text
+                        x={unoSide === 'left' ? pinPoint.x - 10 : pinPoint.x + 10}
+                        y={pinPoint.y + 4}
+                        textAnchor={unoSide === 'left' ? 'end' : 'start'}
+                        fontSize={12}
+                        fontWeight={700}
+                        fill="#254b39"
+                      >
+                        {pinPoint.pin}
                       </text>
-                      <path
-                        d={`M ${anchorX} ${anchorY} Q ${(anchorX + b[0]) / 2 + 18} ${(anchorY + b[1]) / 2} ${b[0]} ${b[1]}`}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={active ? 3.5 : 2}
-                        opacity={active ? 1 : 0.22}
-                      />
-                      <circle cx={b[0]} cy={b[1]} r={3.5} fill={color} stroke="#fff" strokeWidth={1}>
-                        <title>{`Uno ${c.pin} → ${c.holeId}`}</title>
-                      </circle>
-                    </g>
-                  )
-                })}
+                    )}
+                  </g>
+                )
+              })}
               {callouts.map((c) => (
                 <g key={c.key}>
-                  <path d={`M ${c.x} ${c.y} L ${labelX - 5} ${c.labelY}`} fill="none" stroke="#889d83" strokeWidth={1} strokeDasharray="3 3" />
+                  <path
+                    d={`M ${c.x} ${c.y} L ${labelX - 5} ${c.labelY}`}
+                    fill="none"
+                    stroke="#889d83"
+                    strokeWidth={1}
+                    strokeDasharray="3 3"
+                  />
                   <text x={labelX} y={c.labelY - 3} fontSize={11} fontWeight={600} fill="#254b39">
                     {c.label}
                   </text>

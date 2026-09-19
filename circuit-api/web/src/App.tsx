@@ -83,7 +83,7 @@ export default function App() {
       board,
       show: (partial: Partial<Placement>) =>
         setCurrent({
-          version: 2,
+          version: 3,
           sessionId: '',
           breadboardModel: '',
           title: '',
@@ -93,6 +93,7 @@ export default function App() {
           requiredParts: [],
           components: [],
           jumperWires: [],
+          nets: [],
           instructions: [],
           ...(currentRef.current ?? {}),
           ...partial,
@@ -119,6 +120,9 @@ export default function App() {
 
   function renderPlacement(placement: Placement) {
     if (!board) throw new Error('Board map is still loading.')
+    if (placement.version !== 3) {
+      throw new Error('This saved circuit uses an older coordinate-based placement format. Generate it again to update it.')
+    }
     if (placement.breadboard.holeMapVersion !== board.holeMapVersion) {
       throw new Error('This saved circuit uses an older board map. Generate it again before using the current board in XR.')
     }
@@ -126,7 +130,7 @@ export default function App() {
     setSelectedIds([])
     setSelectedRow(null)
     setPlanParts(null)
-    const connections = placement.jumperWires.length + (placement.externalConnections?.length ?? 0)
+    const connections = placement.jumperWires.length
     setStatus({
       text: `✓ ${placement.source === 'fixture' ? 'Ready-made circuit loaded' : 'Circuit generated'}\n${placement.title} · ${connections} connections · circuit checks passed.`,
       error: false,
@@ -225,7 +229,12 @@ export default function App() {
     if (current) {
       const idsForPart = (type: string): string[] => {
         if (type === 'jumper_wire') return current.jumperWires.map((w) => w.id)
-        if (type === 'arduino_uno') return (current.externalConnections ?? []).map((c) => c.id)
+        if (type === 'arduino_uno') {
+          const deviceIds = new Set((current.externalDevices ?? []).map((d) => d.id))
+          return current.jumperWires
+            .filter((w) => [w.from, w.to].some((endpoint) => deviceIds.has(endpoint.split(':')[0] ?? '')))
+            .map((w) => w.id)
+        }
         return current.components.filter((c) => c.type === type).map((c) => c.id)
       }
       return current.requiredParts.map((p) => ({

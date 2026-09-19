@@ -5,7 +5,7 @@
       "properties": {
         "version": {
           "type": "integer",
-          "const": 1
+          "const": 3
         },
         "sessionId": {
           "type": "string",
@@ -54,104 +54,12 @@
             },
             "physicalVerified": {
               "type": "boolean"
-            },
-            "coordinateFrame": {
-              "type": "object",
-              "properties": {
-                "units": {
-                  "type": "string",
-                  "enum": [
-                    "meters"
-                  ]
-                },
-                "handedness": {
-                  "type": "string",
-                  "enum": [
-                    "left"
-                  ]
-                },
-                "originHole": {
-                  "type": "string",
-                  "enum": [
-                    "A1"
-                  ]
-                },
-                "xAxis": {
-                  "type": "string",
-                  "enum": [
-                    "A1 toward J1"
-                  ]
-                },
-                "yAxis": {
-                  "type": "string",
-                  "enum": [
-                    "out of board"
-                  ]
-                },
-                "zAxis": {
-                  "type": "string",
-                  "enum": [
-                    "A1 toward A63"
-                  ]
-                }
-              },
-              "required": [
-                "units",
-                "handedness",
-                "originHole",
-                "xAxis",
-                "yAxis",
-                "zAxis"
-              ],
-              "additionalProperties": false
-            },
-            "calibrationReferences": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "hole": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2000
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      },
-                      "z": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "x",
-                      "y",
-                      "z"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "hole",
-                  "position"
-                ],
-                "additionalProperties": false
-              },
-              "minItems": 3,
-              "maxItems": 3
             }
           },
           "required": [
             "model",
             "holeMapVersion",
-            "physicalVerified",
-            "coordinateFrame",
-            "calibrationReferences"
+            "physicalVerified"
           ],
           "additionalProperties": false
         },
@@ -221,93 +129,48 @@
                 "minLength": 1,
                 "maxLength": 2000
               },
-              "terminals": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2000
-                    },
-                    "holeId": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2000
-                    },
-                    "position": {
-                      "type": "object",
-                      "properties": {
-                        "x": {
-                          "type": "number"
-                        },
-                        "y": {
-                          "type": "number"
-                        },
-                        "z": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "x",
-                        "y",
-                        "z"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "holeId",
-                    "position"
-                  ],
-                  "additionalProperties": false
-                },
-                "minItems": 2,
-                "maxItems": 4
-              },
-              "position": {
+              "mount": {
                 "type": "object",
                 "properties": {
-                  "x": {
-                    "type": "number"
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "breadboard"
+                    ]
                   },
-                  "y": {
-                    "type": "number"
+                  "board": {
+                    "type": "string",
+                    "enum": [
+                      "BB1"
+                    ]
                   },
-                  "z": {
-                    "type": "number"
+                  "terminals": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                    },
+                    "minProperties": 2,
+                    "maxProperties": 4
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "north",
+                      "south",
+                      "east",
+                      "west"
+                    ]
                   }
                 },
                 "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
-              },
-              "rotation": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  },
-                  "w": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z",
-                  "w"
+                  "type",
+                  "board",
+                  "terminals"
                 ],
                 "additionalProperties": false
               },
@@ -322,9 +185,7 @@
               "type",
               "value",
               "assetId",
-              "terminals",
-              "position",
-              "rotation",
+              "mount",
               "buildStep"
             ],
             "additionalProperties": false
@@ -341,60 +202,23 @@
                 "type": "string",
                 "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
               },
-              "fromHole": {
+              "from": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
               },
-              "toHole": {
+              "to": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
               },
               "color": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              },
-              "startPosition": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
-              },
-              "endPosition": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+                "enum": [
+                  "red",
+                  "black",
+                  "yellow",
+                  "blue",
+                  "green"
+                ]
               },
               "buildStep": {
                 "type": "integer",
@@ -404,17 +228,44 @@
             },
             "required": [
               "id",
-              "fromHole",
-              "toHole",
+              "from",
+              "to",
               "color",
-              "startPosition",
-              "endPosition",
               "buildStep"
             ],
             "additionalProperties": false
           },
           "minItems": 0,
           "maxItems": 12
+        },
+        "nets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                },
+                "minItems": 2,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "id",
+              "members"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 6
         },
         "validation": {
           "type": "object",
@@ -499,6 +350,7 @@
         "requiredParts",
         "components",
         "jumperWires",
+        "nets",
         "validation",
         "instructions"
       ],
@@ -509,7 +361,7 @@
       "properties": {
         "version": {
           "type": "integer",
-          "const": 2
+          "const": 3
         },
         "sessionId": {
           "type": "string",
@@ -558,104 +410,12 @@
             },
             "physicalVerified": {
               "type": "boolean"
-            },
-            "coordinateFrame": {
-              "type": "object",
-              "properties": {
-                "units": {
-                  "type": "string",
-                  "enum": [
-                    "meters"
-                  ]
-                },
-                "handedness": {
-                  "type": "string",
-                  "enum": [
-                    "left"
-                  ]
-                },
-                "originHole": {
-                  "type": "string",
-                  "enum": [
-                    "A1"
-                  ]
-                },
-                "xAxis": {
-                  "type": "string",
-                  "enum": [
-                    "A1 toward J1"
-                  ]
-                },
-                "yAxis": {
-                  "type": "string",
-                  "enum": [
-                    "out of board"
-                  ]
-                },
-                "zAxis": {
-                  "type": "string",
-                  "enum": [
-                    "A1 toward A63"
-                  ]
-                }
-              },
-              "required": [
-                "units",
-                "handedness",
-                "originHole",
-                "xAxis",
-                "yAxis",
-                "zAxis"
-              ],
-              "additionalProperties": false
-            },
-            "calibrationReferences": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "hole": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2000
-                  },
-                  "position": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "number"
-                      },
-                      "y": {
-                        "type": "number"
-                      },
-                      "z": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "x",
-                      "y",
-                      "z"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "hole",
-                  "position"
-                ],
-                "additionalProperties": false
-              },
-              "minItems": 3,
-              "maxItems": 3
             }
           },
           "required": [
             "model",
             "holeMapVersion",
-            "physicalVerified",
-            "coordinateFrame",
-            "calibrationReferences"
+            "physicalVerified"
           ],
           "additionalProperties": false
         },
@@ -725,93 +485,48 @@
                 "minLength": 1,
                 "maxLength": 2000
               },
-              "terminals": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2000
-                    },
-                    "holeId": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2000
-                    },
-                    "position": {
-                      "type": "object",
-                      "properties": {
-                        "x": {
-                          "type": "number"
-                        },
-                        "y": {
-                          "type": "number"
-                        },
-                        "z": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "x",
-                        "y",
-                        "z"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "holeId",
-                    "position"
-                  ],
-                  "additionalProperties": false
-                },
-                "minItems": 2,
-                "maxItems": 4
-              },
-              "position": {
+              "mount": {
                 "type": "object",
                 "properties": {
-                  "x": {
-                    "type": "number"
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "breadboard"
+                    ]
                   },
-                  "y": {
-                    "type": "number"
+                  "board": {
+                    "type": "string",
+                    "enum": [
+                      "BB1"
+                    ]
                   },
-                  "z": {
-                    "type": "number"
+                  "terminals": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                    },
+                    "minProperties": 2,
+                    "maxProperties": 4
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "north",
+                      "south",
+                      "east",
+                      "west"
+                    ]
                   }
                 },
                 "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
-              },
-              "rotation": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  },
-                  "w": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z",
-                  "w"
+                  "type",
+                  "board",
+                  "terminals"
                 ],
                 "additionalProperties": false
               },
@@ -826,9 +541,7 @@
               "type",
               "value",
               "assetId",
-              "terminals",
-              "position",
-              "rotation",
+              "mount",
               "buildStep"
             ],
             "additionalProperties": false
@@ -845,60 +558,23 @@
                 "type": "string",
                 "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
               },
-              "fromHole": {
+              "from": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
               },
-              "toHole": {
+              "to": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
               },
               "color": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              },
-              "startPosition": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
-              },
-              "endPosition": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+                "enum": [
+                  "red",
+                  "black",
+                  "yellow",
+                  "blue",
+                  "green"
+                ]
               },
               "buildStep": {
                 "type": "integer",
@@ -908,17 +584,44 @@
             },
             "required": [
               "id",
-              "fromHole",
-              "toHole",
+              "from",
+              "to",
               "color",
-              "startPosition",
-              "endPosition",
               "buildStep"
             ],
             "additionalProperties": false
           },
           "minItems": 0,
           "maxItems": 12
+        },
+        "nets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                },
+                "minItems": 2,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "id",
+              "members"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 6
         },
         "validation": {
           "type": "object",
@@ -1017,11 +720,37 @@
                   "arduino_uno_r3_v1"
                 ]
               },
-              "placementMode": {
-                "type": "string",
-                "enum": [
-                  "separate_anchor_required"
-                ]
+              "mount": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "external"
+                    ]
+                  },
+                  "relativeTo": {
+                    "type": "string",
+                    "enum": [
+                      "BB1"
+                    ]
+                  },
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "right",
+                      "top",
+                      "bottom"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "relativeTo",
+                  "side"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -1029,82 +758,12 @@
               "type",
               "model",
               "assetId",
-              "placementMode"
+              "mount"
             ],
             "additionalProperties": false
           },
           "minItems": 1,
           "maxItems": 1
-        },
-        "externalConnections": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
-              },
-              "deviceId": {
-                "type": "string",
-                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
-              },
-              "pin": {
-                "type": "string",
-                "enum": [
-                  "D13",
-                  "GND"
-                ]
-              },
-              "holeId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              },
-              "boardPosition": {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  },
-                  "z": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
-              },
-              "color": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              },
-              "buildStep": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 100
-              }
-            },
-            "required": [
-              "id",
-              "deviceId",
-              "pin",
-              "holeId",
-              "boardPosition",
-              "color",
-              "buildStep"
-            ],
-            "additionalProperties": false
-          },
-          "minItems": 2,
-          "maxItems": 2
         },
         "firmware": {
           "type": "object",
@@ -1160,10 +819,10 @@
         "requiredParts",
         "components",
         "jumperWires",
+        "nets",
         "validation",
         "instructions",
         "externalDevices",
-        "externalConnections",
         "firmware"
       ],
       "additionalProperties": false

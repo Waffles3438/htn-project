@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "sessionId": "demo-button-led",
   "breadboardModel": "demo_breadboard_v1",
   "title": "Simple LED",
@@ -9,41 +9,7 @@
   "breadboard": {
     "model": "demo_breadboard_v1",
     "holeMapVersion": "person2-9d81633+rails1",
-    "physicalVerified": false,
-    "coordinateFrame": {
-      "units": "meters",
-      "handedness": "left",
-      "originHole": "A1",
-      "xAxis": "A1 toward J1",
-      "yAxis": "out of board",
-      "zAxis": "A1 toward A63"
-    },
-    "calibrationReferences": [
-      {
-        "hole": "A1",
-        "position": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      {
-        "hole": "J1",
-        "position": {
-          "x": 0.02794,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      {
-        "hole": "A63",
-        "position": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.15748
-        }
-      }
-    ]
+    "physicalVerified": false
   },
   "requiredParts": [
     {
@@ -73,36 +39,13 @@
       "type": "led",
       "value": "red",
       "assetId": "led_red_v1",
-      "terminals": [
-        {
-          "id": "anode",
-          "holeId": "A15",
-          "position": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.03556
-          }
-        },
-        {
-          "id": "cathode",
-          "holeId": "A16",
-          "position": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0381
-          }
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "anode": "BB1:A15",
+          "cathode": "BB1:A16"
         }
-      ],
-      "position": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.03683
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.70710678,
-        "z": 0,
-        "w": 0.70710678
       },
       "buildStep": 1
     },
@@ -111,36 +54,13 @@
       "type": "resistor",
       "value": "220ohm",
       "assetId": "resistor_220ohm_v1",
-      "terminals": [
-        {
-          "id": "a",
-          "holeId": "B12",
-          "position": {
-            "x": 0.00254,
-            "y": 0.0,
-            "z": 0.02794
-          }
-        },
-        {
-          "id": "b",
-          "holeId": "B15",
-          "position": {
-            "x": 0.00254,
-            "y": 0.0,
-            "z": 0.03556
-          }
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "a": "BB1:B12",
+          "b": "BB1:B15"
         }
-      ],
-      "position": {
-        "x": 0.00254,
-        "y": 0.0,
-        "z": 0.03175
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.70710678,
-        "z": 0,
-        "w": 0.70710678
       },
       "buildStep": 2
     },
@@ -149,36 +69,13 @@
       "type": "power_supply",
       "value": "5V",
       "assetId": "power_supply_5v_v1",
-      "terminals": [
-        {
-          "id": "positive",
-          "holeId": "J1",
-          "position": {
-            "x": 0.02794,
-            "y": 0.0,
-            "z": 0.0
-          }
-        },
-        {
-          "id": "negative",
-          "holeId": "J2",
-          "position": {
-            "x": 0.02794,
-            "y": 0.0,
-            "z": 0.00254
-          }
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "positive": "BB1:J1",
+          "negative": "BB1:J2"
         }
-      ],
-      "position": {
-        "x": 0.02794,
-        "y": 0.0,
-        "z": 0.00127
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.70710678,
-        "z": 0,
-        "w": 0.70710678
       },
       "buildStep": 5
     }
@@ -186,37 +83,40 @@
   "jumperWires": [
     {
       "id": "wire_1",
-      "fromHole": "I1",
-      "toHole": "C12",
+      "from": "BB1:I1",
+      "to": "BB1:C12",
       "color": "red",
-      "buildStep": 3,
-      "startPosition": {
-        "x": 0.0254,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "endPosition": {
-        "x": 0.00508,
-        "y": 0.0,
-        "z": 0.02794
-      }
+      "buildStep": 3
     },
     {
       "id": "wire_3",
-      "fromHole": "C16",
-      "toHole": "I2",
+      "from": "BB1:C16",
+      "to": "BB1:I2",
       "color": "black",
-      "buildStep": 4,
-      "startPosition": {
-        "x": 0.00508,
-        "y": 0.0,
-        "z": 0.0381
-      },
-      "endPosition": {
-        "x": 0.0254,
-        "y": 0.0,
-        "z": 0.00254
-      }
+      "buildStep": 4
+    }
+  ],
+  "nets": [
+    {
+      "id": "LED_SIGNAL",
+      "members": [
+        "led_1:anode",
+        "resistor_1:b"
+      ]
+    },
+    {
+      "id": "GND",
+      "members": [
+        "led_1:cathode",
+        "power_1:negative"
+      ]
+    },
+    {
+      "id": "VCC",
+      "members": [
+        "power_1:positive",
+        "resistor_1:a"
+      ]
     }
   ],
   "validation": {

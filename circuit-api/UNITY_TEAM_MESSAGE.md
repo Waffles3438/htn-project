@@ -4,22 +4,22 @@ Draft for sharing; not yet sent. Refresh `handoff/circuit-api-to-unity.zip` with
 
 **2026-09-19 geometry update:** use map `person2-9d81633+rails1`. All 630 A–J coordinates, component/terminal names, asset IDs and calibration references are unchanged. The 200 rail positions now use symmetric X offsets: L+=−0.01016, L−=−0.00762, R+=0.03556, R−=0.03810 meters. Five-hole groups span rows 3–31 in segment A and 33–61 in B; segment nets are unchanged. Exact old/new formulas and migration instructions are in `UNITY_HANDOFF.md`. This is modeled geometry, not a measured physical certification. Please check both rail sides against the FBX and real board.
 
-Check `breadboard.holeMapVersion` before rendering. Old saved sessions are not migrated automatically: regenerate or use their matching old map. Do not mix versions or compensate with UI-only transforms. Browser hole markers are not physical aperture measurements.
+Check `version == 3` and `breadboard.holeMapVersion` before rendering. Old saved sessions are not migrated automatically: regenerate or use their matching old map. Do not mix versions or compensate with UI-only transforms. Browser hole markers are not physical aperture measurements.
 
-The refreshed ZIP also includes the existing Arduino version 2 fixture: `externalDevices` resolves `arduino_uno_r3_v1` with a separate anchor; `externalConnections` supplies breadboard endpoints D13→J1 and GND→J2. Unity must provide the Uno pose and measured D13/GND pin anchors. `firmware` includes `circuit.ino`; physical upload is still unverified. A version-1-only importer should reject version 2 rather than drop these wires.
+**2026-09-19 placement v3 update:** placements are now semantic — components carry `mount` maps from stable terminal ids to board addresses (`"anode": "BB1:A15"`), wires carry `from`/`to` endpoints, controllers mount externally (`{"type": "external", "relativeTo": "BB1", "side": "left"}`), and `nets[]` names the electrical groups. Placements carry no XYZ; derive every position from `board-hole-map.meters.json` plus your prefab anchors. The ZIP's Arduino fixture connects `mcu_1:D13 → BB1:C12` and `BB1:C16 → mcu_1:GND` through ordinary jumper entries. Unity still provides the Uno pose and measured D13/GND pin anchors. `firmware` includes `circuit.ino`; physical upload is still unverified. Address grammar and derivation rules are in `UNITY_HANDOFF.md`.
 
 Our circuit API now takes a prompt, identifies the required components, assigns breadboard holes, validates the circuit, and exports `placement.json`. Can we integrate against the attached handoff package first, using its fixed button + LED fixture?
 
 **What I'm providing**
 
-- `fixtures/button_led.placement.json`: complete circuit, named terminals, hole IDs, local positions, quaternion rotations, asset IDs, wire endpoints and build steps.
+- `fixtures/button_led.placement.json`: complete semantic circuit — mounts, terminal ids, board addresses, jumper endpoints, named nets, asset IDs and build steps (no coordinates; derive them from the board map).
 - `board-hole-map.meters.json`: the versioned 830-hole runtime map in meters, with the coordinate frame and calibration references.
 - `reference/assets/breadboard.fbx`: supplied breadboard model; its embedded scale/rotation still need normalization.
 - `schemas/placement.schema.json` and `UNITY_HANDOFF.md`: exact field definitions and rendering/alignment notes.
 
 **Proposed rendering agreement — please confirm or flag what your renderer already does differently**
 
-Use one `BoardRoot`, with all component wrappers and wires as children. JSON positions are local meters: A1 is the origin, +X points toward J1, +Z toward A63, and +Y above the board. Resolve each `assetId` to one of your prefabs. The terminal positions are the target insertion points; adjust each imported mesh's pivot/rotation/lead geometry inside its wrapper to match them. Avoid moving components independently to compensate for board alignment.
+Use one `BoardRoot`, with all component wrappers and wires as children. The placement names addresses; you derive board-local meters from the hole map: A1 is the origin, +X points toward J1, +Z toward A63, and +Y above the board. Resolve each `assetId` to one of your prefabs. The resolved terminal positions are the target insertion points; adjust each imported mesh's pivot/rotation/lead geometry inside its wrapper to match them. Avoid moving components independently to compensate for board alignment.
 
 Start by rendering dots at A1, J1 and A63, then dots at every fixture terminal and wire endpoint. Once the dots match the breadboard mesh, add the models and wires. If a model misses the dots, fix its wrapper/pin geometry rather than the hole map.
 

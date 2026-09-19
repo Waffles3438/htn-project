@@ -9,7 +9,7 @@ Read `UNITY_HANDOFF.md` for coordinate/asset contracts and `UNITY_TEAM_MESSAGE.m
 - New rail X meters: L+=−0.01016, L−=−0.00762, R+=0.03556, R−=0.03810. For segment index i=1..25: row=start+6*floor((i−1)/5)+(i−1)%5, start=3 for A or 33 for B; Z=(row−1)*0.00254. Eight segment nets remain unchanged. Five-hole gaps do not split a segment's net.
 - This is a symmetric model, not measured board/FBX alignment. Keep `physicalVerified=false`; do not claim universal standard dimensions. Never apply UI-only coordinate corrections. Preserve pinned `reference/person2/` bytes.
 - Old saved placements are not rewritten. The browser rejects mismatched maps before replacing its preview. Regenerate old circuits or use a matching old map in XR. Restart the API after map changes.
-- Existing uncommitted Arduino work predates this task: placement version 2, externalDevices/externalConnections/firmware, Uno asset `arduino_uno_r3_v1`. Preserve it and unrelated worktree changes. Version 1 fixtures remain supported. Unity needs a separate Uno pose and D13/GND pin anchors.
+- Placement v3 (2026-09-19) superseded the coordinate placement: components mount semantically (`mount` terminal maps to `BB1:` addresses), wires carry `from`/`to` endpoints, `nets[]` names electrical groups, and the Uno is an `externalDevices[]` entry with `mount: {"type": "external", "relativeTo": "BB1", "side": "left"}`. No XYZ in placements; renderers derive coordinates from the board map. The earlier uncommitted Arduino work (placement version 2, externalDevices/externalConnections/firmware, Uno asset `arduino_uno_r3_v1`) was folded into v3; version 1 fixtures remain supported. Unity needs a separate Uno pose and D13/GND pin anchors.
 
 ## Checks and packaging
 

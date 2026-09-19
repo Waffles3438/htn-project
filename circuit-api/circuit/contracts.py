@@ -35,39 +35,40 @@ DRAFT_COMPONENT = obj(id=ID, terminals=arr(TERMINAL, 2, 4), buildStep=STEP)
 WIRE = obj(id=ID, **{"from": string(), "to": string()},
            color=string("red", "black", "yellow", "blue", "green"), buildStep=STEP)
 DRAFT = obj(components=arr(DRAFT_COMPONENT, 3, 4), wires=arr(WIRE, 0, 12))
-VEC = obj(x={"type": "number"}, y={"type": "number"}, z={"type": "number"})
-QUAT = obj(x={"type": "number"}, y={"type": "number"}, z={"type": "number"}, w={"type": "number"})
-FRAME = obj(units=string("meters"), handedness=string("left"), originHole=string("A1"),
-            xAxis=string("A1 toward J1"), yAxis=string("out of board"),
-            zAxis=string("A1 toward A63"))
+# Semantic endpoints: board addresses (BB1:A15, BB1:RAIL:L:+:A:12) or component terminals (led_1:anode).
+ENDPOINT = {"type": "string",
+            "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"}
+TERMINAL_MAP = {"type": "object", "additionalProperties": ENDPOINT, "minProperties": 2, "maxProperties": 4}
+# Footprint-based mounting is reserved in the format: a mount may carry anchor + orientation
+# instead of an explicit terminal map (breadboard-compatible controllers). Not emitted yet.
+BREADBOARD_MOUNT = {"type": "object",
+                    "properties": {"type": string("breadboard"), "board": string("BB1"),
+                                   "terminals": TERMINAL_MAP, "anchor": ENDPOINT,
+                                   "orientation": string("north", "south", "east", "west")},
+                    "required": ["type", "board", "terminals"], "additionalProperties": False}
 PLACEMENT_COMPONENT = obj(id=ID, type=string("power_supply", "led", "resistor", "button"), value=string(), assetId=string(),
-                          terminals=arr(obj(id=string(), holeId=string(), position=VEC), 2, 4),
-                          position=VEC, rotation=QUAT, buildStep=STEP)
-PLACEMENT_WIRE = obj(id=ID, fromHole=string(), toHole=string(), color=string(),
-                     startPosition=VEC, endPosition=VEC, buildStep=STEP)
-PLACEMENT = obj(version={"type": "integer", "const": 1}, sessionId=REQUEST["properties"]["sessionId"],
-                breadboardModel=string(), title=string(), prompt=string(), source=string("openai", "openrouter", "fixture"), generatedAt=string(),
-                breadboard=obj(model=string(), holeMapVersion=string(), physicalVerified={"type": "boolean"},
-                               coordinateFrame=FRAME, calibrationReferences=arr(obj(hole=string(), position=VEC), 3, 3)),
-                requiredParts=arr(PART, 1, 8), components=arr(PLACEMENT_COMPONENT, 3, 4),
-                jumperWires=arr(PLACEMENT_WIRE, 0, 12),
-                validation=obj(valid={"type": "boolean", "const": True}, checks=arr(string()), warnings=arr(string())),
-                instructions=arr(obj(step=STEP, componentIds=arr(ID), text=string()), 1))
-
-
-PLACEMENT_V1 = deepcopy(PLACEMENT)
-# MCU bodies have no breadboard-local pose until Unity supplies a measured anchor.
-PLACEMENT_V2 = deepcopy(PLACEMENT_V1)
-PLACEMENT_V2['properties']['version'] = {'type': 'integer', 'const': 2}
-PLACEMENT_V2['properties']['components'] = arr(PLACEMENT_COMPONENT, 2, 2)
-PLACEMENT_V2['properties']['externalDevices'] = arr(obj(id=ID, type=string('arduino_uno'),
-    model=string('uno_r3'), assetId=string('arduino_uno_r3_v1'), placementMode=string('separate_anchor_required')), 1, 1)
-PLACEMENT_V2['properties']['externalConnections'] = arr(obj(id=ID, deviceId=ID, pin=string('D13','GND'),
-    holeId=string(), boardPosition=VEC, color=string(), buildStep=STEP), 2, 2)
-PLACEMENT_V2['properties']['firmware'] = obj(filename=string('circuit.ino'), board=string('Arduino Uno R3'),
+                          mount=BREADBOARD_MOUNT, buildStep=STEP)
+PLACEMENT_WIRE = obj(id=ID, **{"from": ENDPOINT, "to": ENDPOINT},
+                     color=string("red", "black", "yellow", "blue", "green"), buildStep=STEP)
+NET = obj(id=string(), members=arr(ENDPOINT, 2, 8))
+PLACEMENT_V3 = obj(version={"type": "integer", "const": 3}, sessionId=REQUEST["properties"]["sessionId"],
+                   breadboardModel=string(), title=string(), prompt=string(), source=string("openai", "openrouter", "fixture"), generatedAt=string(),
+                   breadboard=obj(model=string(), holeMapVersion=string(), physicalVerified={"type": "boolean"}),
+                   requiredParts=arr(PART, 1, 8), components=arr(PLACEMENT_COMPONENT, 3, 4),
+                   jumperWires=arr(PLACEMENT_WIRE, 0, 12), nets=arr(NET, 2, 6),
+                   validation=obj(valid={"type": "boolean", "const": True}, checks=arr(string()), warnings=arr(string())),
+                   instructions=arr(obj(step=STEP, componentIds=arr(ID), text=string()), 1))
+# Controllers too large for the breadboard mount externally: renderers derive the pose
+# from relativeTo/side plus their own asset anchors. No XYZ coordinates are exchanged.
+PLACEMENT_V3_MCU = deepcopy(PLACEMENT_V3)
+PLACEMENT_V3_MCU['properties']['components'] = arr(PLACEMENT_COMPONENT, 2, 2)
+PLACEMENT_V3_MCU['properties']['externalDevices'] = arr(obj(id=ID, type=string('arduino_uno'),
+    model=string('uno_r3'), assetId=string('arduino_uno_r3_v1'),
+    mount=obj(type=string('external'), relativeTo=string('BB1'), side=string('left', 'right', 'top', 'bottom'))), 1, 1)
+PLACEMENT_V3_MCU['properties']['firmware'] = obj(filename=string('circuit.ino'), board=string('Arduino Uno R3'),
     language=string('arduino'), code=string(), uploadInstructions=string())
-PLACEMENT_V2['required'] += ['externalDevices', 'externalConnections', 'firmware']
-PLACEMENT = {'oneOf': [PLACEMENT_V1, PLACEMENT_V2]}
+PLACEMENT_V3_MCU['required'] += ['externalDevices', 'firmware']
+PLACEMENT = {'oneOf': [PLACEMENT_V3, PLACEMENT_V3_MCU]}
 
 
 def export():

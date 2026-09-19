@@ -19,7 +19,8 @@ def fixture(name):
     if name == "arduino_led":
         plan, draft = fixture("led")
         plan.update(title="Arduino Uno · blinking LED", behavior="blink")
-        plan["components"][0].update(type="arduino_uno", value="Uno R3", purpose="Drive LED from digital pin 13")
+        plan["components"][0].update(id="mcu_1", type="arduino_uno", value="Uno R3", purpose="Drive LED from digital pin 13")
+        draft["components"][-1]["id"] = "mcu_1"
         return plan, draft
     button = name == "button_led"
     plan = {"title": "Button-controlled LED" if button else "Simple LED",

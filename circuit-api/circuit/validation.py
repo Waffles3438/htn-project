@@ -31,6 +31,8 @@ def normalize_value(value):
 CATALOG = {"arduino_uno": "unor3", "power_supply": "5v", "led": "red", "resistor": "220ohm", "button": "momentary", "jumper_wire": "male-male"}
 PINS = {"power_supply": {"positive", "negative"}, "led": {"anode", "cathode"},
         "resistor": {"a", "b"}, "button": {"a1", "a2", "b1", "b2"}}
+# Terminals a component definition joins internally, independent of the board model.
+INTERNAL_JOINS = {"button": (("a1", "a2"), ("b1", "b2"))}
 
 
 def validate_request(request):
@@ -146,8 +148,8 @@ def validate_layout(plan, draft, inventory):
             nets.join(wire["from"], wire["to"])
         if "button" in pins:
             p = pins["button"]
-            nets.join(p["a1"], p["a2"])
-            nets.join(p["b1"], p["b2"])
+            for a, b in INTERNAL_JOINS["button"]:
+                nets.join(p[a], p[b])
             if pressed:
                 nets.join(p["a1"], p["b1"])
         pos, neg = (nets.hole(pins["power_supply"][n]) for n in ("positive", "negative"))

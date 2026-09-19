@@ -25,19 +25,34 @@ class ExportTests(unittest.TestCase):
             with ZipFile(root / "handoff/circuit-api-to-unity.zip") as archive:
                 board = json.loads(archive.read("board-hole-map.meters.json"))
                 self.assertEqual(board, hole_map())
-                positions = {h["id"]: h["position"] for h in board["holes"]}
                 schema = json.loads(archive.read("schemas/placement.schema.json"))
                 self.assertEqual(schema, contracts.PLACEMENT)
                 for name in PROMPTS:
                     placement = json.loads(archive.read("fixtures/" + name + ".placement.json"))
                     self.assertEqual(placement["breadboard"]["holeMapVersion"], board["holeMapVersion"])
                     self.assertFalse(placement["breadboard"]["physicalVerified"])
+                    self.assertEqual(placement["version"], 3)
+                    holes = {h["id"] for h in board["holes"]}
+                    terminals = {}
                     for component in placement["components"]:
-                        for terminal in component["terminals"]:
-                            self.assertEqual(terminal["position"], positions[terminal["holeId"]])
+                        self.assertEqual(component["mount"]["type"], "breadboard")
+                        self.assertEqual(component["mount"]["board"], board["id"])
+                        for terminal, address in component["mount"]["terminals"].items():
+                            hole = address.split(":", 1)[1]
+                            self.assertIn(hole, holes)
+                            terminals[component["id"] + ":" + terminal] = hole
+                    device_pins = {d["id"] + ":" + pin for d in placement.get("externalDevices", [])
+                                   for pin in ("D13", "GND")}
                     for wire in placement["jumperWires"]:
-                        self.assertEqual(wire["startPosition"], positions[wire["fromHole"]])
-                        self.assertEqual(wire["endPosition"], positions[wire["toHole"]])
-                    for connection in placement.get("externalConnections", []):
-                        self.assertEqual(connection["boardPosition"], positions[connection["holeId"]])
+                        for endpoint in (wire["from"], wire["to"]):
+                            if endpoint.startswith("BB1:"):
+                                self.assertIn(endpoint.split(":", 1)[1], holes)
+                            else:
+                                self.assertIn(endpoint, set(terminals) | device_pins)
+                    net_ids = [n["id"] for n in placement["nets"]]
+                    self.assertEqual(len(net_ids), len(set(net_ids)))
+                    for net in placement["nets"]:
+                        self.assertGreaterEqual(len(net["members"]), 2)
+                        for member in net["members"]:
+                            self.assertIn(member, set(terminals) | device_pins)
                 self.assertIsNone(archive.testzip())

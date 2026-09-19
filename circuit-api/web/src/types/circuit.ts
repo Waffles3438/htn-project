@@ -1,6 +1,6 @@
-// Mirror of the placement JSON the Python API returns and Unity/XR consumes.
-// Keep field names identical to schemas/placement.schema.json.
-
+// Semantic circuit interchange — the canonical source of truth shared with Unity/XR.
+// Addresses and mounts describe what connects where; every renderer derives its own
+// geometry from the board map and component definitions. No XYZ coordinates here.
 export interface Vec3 {
   x: number
   y: number
@@ -14,6 +14,7 @@ export interface Hole {
 }
 
 export interface BoardMap {
+  id: string
   model: string
   holeMapVersion: string
   physicalVerified: boolean
@@ -26,31 +27,47 @@ export interface Part {
   quantity: number
 }
 
-export interface Terminal {
-  id: string
-  holeId: string
-  position: Vec3
+// "BB1:E5" (board hole) or "led_1:anode" (component terminal).
+export type Endpoint = string
+
+export interface BreadboardMount {
+  type: 'breadboard'
+  board: string
+  terminals: Record<string, Endpoint>
+  // Reserved for footprint-based mounting (breadboard-compatible controllers):
+  // anchor + orientation determine the remaining terminal addresses from the definition.
+  anchor?: Endpoint
+  orientation?: 'north' | 'south' | 'east' | 'west'
 }
+
+export interface ExternalMount {
+  type: 'external'
+  relativeTo: string
+  side: 'left' | 'right' | 'top' | 'bottom'
+}
+
+export type Mount = BreadboardMount | ExternalMount
 
 export interface CircuitComponent {
   id: string
   type: string
   value: string
   assetId: string
-  terminals: Terminal[]
-  position: Vec3
-  rotation?: { x: number; y: number; z: number; w: number }
+  mount: Mount
   buildStep: number
 }
 
 export interface JumperWire {
   id: string
-  fromHole: string
-  toHole: string
+  from: Endpoint
+  to: Endpoint
   color: string
   buildStep: number
-  startPosition: Vec3
-  endPosition: Vec3
+}
+
+export interface CircuitNet {
+  id: string
+  members: Endpoint[]
 }
 
 export interface ExternalDevice {
@@ -58,17 +75,7 @@ export interface ExternalDevice {
   type: string
   model: string
   assetId: string
-  placementMode: string
-}
-
-export interface ExternalConnection {
-  id: string
-  deviceId: string
-  pin: string
-  holeId: string
-  boardPosition: Vec3
-  color: string
-  buildStep: number
+  mount: ExternalMount
 }
 
 export interface Firmware {
@@ -85,7 +92,7 @@ export interface Instruction {
 }
 
 export interface Placement {
-  version: number
+  version: 3
   sessionId: string
   breadboardModel: string
   title: string
@@ -95,10 +102,10 @@ export interface Placement {
   requiredParts: Part[]
   components: CircuitComponent[]
   jumperWires: JumperWire[]
+  nets: CircuitNet[]
   validation?: { valid: boolean; checks: string[]; warnings: string[] }
   instructions: Instruction[]
   externalDevices?: ExternalDevice[]
-  externalConnections?: ExternalConnection[]
   firmware?: Firmware
 }
 

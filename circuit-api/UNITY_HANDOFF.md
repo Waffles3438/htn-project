@@ -22,13 +22,13 @@ The first fixture has these exact assignments:
 
 | Element | Hole assignments |
 |---|---|
-| LED | anode A15; cathode A16 |
-| 220 Ω resistor | a B12; b B15 |
-| Button | a1 E8; b1 F8; a2 E11; b2 F11 |
-| External 5 V supply markers | positive J1; negative J2 |
-| Red jumper | I1 → D8 |
-| Yellow jumper | G8 → C12 |
-| Black jumper | C16 → I2 |
+| LED | anode BB1:A15; cathode BB1:A16 |
+| 220 Ω resistor | a BB1:B12; b BB1:B15 |
+| Button | a1 BB1:E8; b1 BB1:F8; a2 BB1:E11; b2 BB1:F11 |
+| External 5 V supply markers | positive BB1:J1; negative BB1:J2 |
+| Red jumper | BB1:I1 → BB1:D8 |
+| Yellow jumper | BB1:G8 → BB1:C12 |
+| Black jumper | BB1:C16 → BB1:I2 |
 
 Moving or rotating `BoardRoot` must keep all pin and wire endpoints attached to the same board holes. Reimporting the same placement should replace the old circuit, not duplicate it. An invalid/missing new response should keep the last valid display. These checks are the first renderer acceptance test; physical alignment comes after this local scene works.
 
@@ -36,11 +36,23 @@ Moving or rotating `BoardRoot` must keep all pin and wire endpoints attached to 
 
 Both modes use identical circuit JSON. A virtual board beside the physical one uses a user-selected root pose, optionally offset from the calibrated board pose. A direct overlay uses the calibrated pose without that offset. Apply this placement only at `BoardRoot`; do not bake a demonstration offset into component positions or modify the reference hole map. In overlay mode, the breadboard mesh may be hidden while component and hole guides remain visible. Confirm the intended demo mode with the team before integrating camera calibration.
 
-## Existing field names preserved
+## Placement v3 — semantic contract (2026-09-19)
 
-The hardware owner's `person2/data/placement.json` defines `version`, `breadboardModel`, `components`, `components[].assetId`, `terminals[].id`, `terminals[].holeId`, `buildStep`, and `jumperWires` with `fromHole`/`toHole`. These names are unchanged. V1 adds `sessionId`, computed transforms, metadata, validation and instructions. Parsers should ignore unknown additive fields (Kotlin `ignoreUnknownKeys=true`); the Person 2 sample itself is not a complete electrical fixture.
+Placement version 3 is the canonical, renderer-independent circuit description: it names what connects where and carries no coordinates. Coordinates are derived data that each renderer computes from the board map and component definitions. The same JSON must produce the same electrical circuit in the website and in XR.
 
-Only display a newly fetched layout when its supported `version` is 1 or 2, `breadboardModel == "demo_breadboard_v1"`, `sessionId` matches the active session, and `validation.valid == true`. Match `breadboard.holeMapVersion` to the rendered map too. A version-1-only importer must reject version 2 rather than omit its external wires. Preserve the previous circuit and compatible map after HTTP errors and while generating. `source` is `fixture`, `openai`, or `openrouter`; `generatedAt` changes when a new circuit is saved. A polling rate of 1 Hz is sufficient.
+- `components[]`: `id`, `type`, `value`, `assetId`, `buildStep`, and a semantic `mount`. Breadboard-mounted parts use `mount: {"type": "breadboard", "board": "BB1", "terminals": {"anode": "BB1:A15", ...}}` — a map from stable terminal id to board address. There is no `position`, `rotation`, or per-terminal `position` anymore. Footprint-based mounting is reserved in the format for breadboard-compatible controllers (Nano/Pico/ESP32 class): such a mount may instead carry `anchor` + `orientation` (for example `{"anchor": "BB1:E12", "orientation": "north"}`), with the controller definition deriving the remaining pin addresses. The current generator emits explicit terminal maps only.
+- `jumperWires[]`: `id`, `from`, `to`, `color`, `buildStep`. Endpoints are semantic: board addresses (`BB1:I1`) or component terminals (`mcu_1:D13`). There is no `startPosition`/`endPosition`.
+- `externalDevices[]` (Uno only): `id`, `type`, `model`, `assetId`, and `mount: {"type": "external", "relativeTo": "BB1", "side": "left"}`. Unity chooses the actual pose from its own layout rules and measured pin anchors; never expect an XYZ pose.
+- `nets[]`: named electrical groups of terminal endpoints, derived by the API from mounts, wires and internal component joins — for example `{"id": "GND", "members": ["led_1:cathode", "mcu_1:GND"]}`. Naming is deterministic: power nets are `VCC`/`GND`, role nets are `LED_SIGNAL`/`BUTTON_SIGNAL`, remaining nets are `SIGNAL_n`. Nets are sufficient to re-validate connectivity without rendering.
+- `breadboard` is now only `{model, holeMapVersion, physicalVerified}`; the coordinate frame and calibration references live in `board-hole-map.meters.json` (which also carries the board `id` the addresses use).
+
+Semantic address grammar — never coordinates:
+
+- `BB1:<hole>` for terminal-strip holes: `BB1:A1` … `BB1:J63`.
+- `BB1:RAIL:<L|R>:<+|->:<A|B>:<index>` for one rail hole, where index is the 1-based hole index inside the segment: `BB1:RAIL:L:+:A:12` is hole `L+A12`. `BB1:RAIL:L:+:A` (without index) names a whole segment net.
+- `<componentId>:<terminalId>` for component terminals: `led_1:anode`, `resistor_1:b`, `mcu_1:D13`. Terminal ids are stable between the website and Unity.
+
+Only display a newly fetched layout when `version == 3`, `breadboardModel == "demo_breadboard_v1"`, `sessionId` matches the active session, and `validation.valid == true`. Match `breadboard.holeMapVersion` to the rendered map too. Reject other versions — the API itself rejects old saved sessions with `OUTDATED_PLACEMENT`. Preserve the previous circuit and compatible map after HTTP errors and while generating. `source` is `fixture`, `openai`, or `openrouter`; `generatedAt` changes when a new circuit is saved. A polling rate of 1 Hz is sufficient. Parsers should ignore unknown additive fields (Kotlin `ignoreUnknownKeys=true`).
 
 ## Coordinates
 
@@ -64,25 +76,35 @@ The raw board uses millimeters. **Every position in the API placement is in mete
 
 The API declares this as a Unity left-handed local frame, with A1 at `(0,0,0)`. Handedness was not specified in the raw source; the explicit convention here completes that contract. Board-hole positions have Y=0. Calibration references are A1 `(0,0,0)`, J1 `(0.02794,0,0)`, and A63 `(0,0,0.15748)`.
 
-All `components[].position` values are the mean of their terminal insertion points on the board surface. `rotation` is a Unity quaternion `{x,y,z,w}`. Use a **normalized prefab wrapper** whose pivot is the mean terminal insertion point, local +Y is above the board, and local +X points from terminal 0 toward terminal 1. The JSON orders terminals:
+### Deriving coordinates from addresses
+
+The placement carries no coordinates; derive them per renderer:
+
+1. Resolve every board address to a hole position from `board-hole-map.meters.json` (meters, board-local, Y=0).
+2. A breadboard-mounted component's pose is the mean of its terminal insertion points; orient the normalized prefab wrapper so local +X runs from the first terminal toward the second and +Y points above the board. Terminal order per type (also the order of each mount's terminal map keys):
 
 | Type | Terminal order | Asset ID |
 |---|---|---|
 | LED | anode, cathode | `led_red_v1` (existing Person 2 ID) |
 | Resistor | a, b | `resistor_220ohm_v1` (prefab required) |
-| Button | a1, b1, a2, b2 | `button_momentary_v1` (prefab required) |
+| Button | a1, a2, b1, b2 | `button_momentary_v1` (prefab required) |
 | External supply | positive, negative | `power_supply_5v_v1` (connection marker required) |
 
-Do not assume the LED GLB already has this pivot/orientation merely because its asset ID exists. Normalize it once in a wrapper, keep the imported model corrections on its child, then apply generated transforms to the wrapper. For the supplied LED at A15/A16, center = `(0,0,0.03683)` and quaternion = `(0,-0.70710678,0,0.70710678)`.
+3. Jumper wires: resolve `from` and `to` (board address → hole position; component terminal → that terminal's resolved position, or the controller's measured pin anchor for external devices) and render a raised curve between them. Raise the curve in +Y and keep insertion endpoints at Y=0.
+4. External controllers: `mount.relativeTo`/`side` selects which side of the board the controller sits on; Unity places it from its own layout rules and measured pin anchors.
 
-Pin positions are authoritative. For resistors, form/render flexible leads to each supplied terminal point; a fixed mesh's pin span will not necessarily fit every generated resistor span. For the external supply, render two lead markers at its terminal positions; the centroid is not an instruction to place the supply body across those two holes. Jumper wire endpoints are `startPosition` and `endPosition`; render a raised curve between them. Raise the curve in +Y and keep its insertion endpoints at Y=0.
+Do not assume the LED GLB already has this pivot/orientation merely because its asset ID exists. Normalize it once in a wrapper, keep the imported model corrections on its child, then apply the derived transform to the wrapper. For the supplied LED at BB1:A15/BB1:A16 the derived center is `(0,0,0.03683)` with yaw −90° — identical to the old v1 numbers, because the derivation is the same rule the API used to compute them.
+
+Pin positions are authoritative. For resistors, form/render flexible leads to each resolved terminal point; a fixed mesh's pin span will not necessarily fit every generated resistor span. For the external supply, render two lead markers at its resolved terminal positions; the centroid is not an instruction to place the supply body across those two holes.
 
 ```csharp
-// After parsing with your chosen JSON library; positions are board-local meters.
+// Resolve semantic addresses with your hole registry, then derive the pose.
+Vector3 BoardPoint(string address) { /* address → hole map lookup → board-local meters */ }
+var points = component.mount.terminals.Values.Select(BoardPoint).ToList();
 part.transform.SetParent(boardRoot, false);
-part.transform.localPosition = new Vector3(p.position.x, p.position.y, p.position.z);
-part.transform.localRotation = new Quaternion(p.rotation.x, p.rotation.y, p.rotation.z, p.rotation.w);
-// Resolve p.assetId to the normalized prefab wrapper above.
+part.transform.localPosition = MeanOf(points);
+part.transform.localRotation = Orientation(points[0], points[1]); // +X terminal0 → terminal1, +Y up
+// Resolve component.assetId to the normalized prefab wrapper above.
 ```
 
 Sort components and wires together by `buildStep`. The shared `instructions[]` contains matching IDs and user-facing text. Power connects last. This folder supplies JSON; it does not modify the Unity renderer, Android viewer, or WebSocket overlay transport.
@@ -130,14 +152,15 @@ Each segment now has five groups of five holes with one empty pitch between grou
 
 **Physical acceptance:** align A1/J1/A63, then inspect both rail sides, first/last holes, group gaps and segment breaks against the actual board and FBX. Measure rail offsets and continuity. The browser uses one uniform scale for X/Z; hole circles and component bodies are schematic markers, not measured aperture/body dimensions. Do not fix discrepancies with UI-only coordinate shifts or by scaling X and Z differently. Unity still needs verified prefab pin geometry and physical XR alignment.
 
-### Existing Arduino version 2 contract
+### External controller in placement v3
 
-This functionality predates the rail/UI correction. `fixtures/arduino_led.placement.json` represents an external LED driven by Uno R3 D13/GND through 220 Ω, not its built-in LED. No separate supply is used. The Uno is not a breadboard `components[]` entry:
+`fixtures/arduino_led.placement.json` represents an external LED driven by Uno R3 D13/GND through 220 Ω, not its built-in LED. No separate supply is used. The Uno is not a breadboard `components[]` entry:
 
-- `externalDevices[]`: `id`, `type: "arduino_uno"`, `model: "uno_r3"`, `assetId: "arduino_uno_r3_v1"`, `placementMode: "separate_anchor_required"`. There is no invented board-local Uno pose.
-- `externalConnections[]`: `id`, `deviceId`, `pin` (`D13`/`GND`), `holeId`, `boardPosition`, `color`, `buildStep`. The fixture connects D13→J1 (red), GND→J2 (black). Only the breadboard endpoint is provided; resolve the other endpoint from separate Uno pin anchors. Two external leads are counted in inventory.
+- `externalDevices[]`: `id` (`mcu_1`), `type: "arduino_uno"`, `model: "uno_r3"`, `assetId: "arduino_uno_r3_v1"`, and `mount: {"type": "external", "relativeTo": "BB1", "side": "left"}`. There is no invented board-local Uno pose and no XYZ anywhere.
+- The controller's wires are ordinary `jumperWires[]` entries with component endpoints: `mcu_1:D13 → BB1:C12` (red) and `BB1:C16 → mcu_1:GND` (black). Resolve `mcu_1:*` from the Uno's measured pin anchors and the other side from the board map. Two external leads are counted in inventory.
+- `nets[]` includes the controller pins: `GND` contains `mcu_1:GND`; the D13 drive net contains `mcu_1:D13`.
 - `firmware`: `filename: "circuit.ino"`, `board: "Arduino Uno R3"`, `language: "arduino"`, `code`, `uploadInstructions`. Supports steady HIGH or one second HIGH/one second LOW; physical upload remains unverified.
 
-Sort external connections alongside components and jumpers by `buildStep`; instructions reference their IDs. Unity must supply the Uno prefab, separate body pose and measured D13/GND anchors. Wire with USB disconnected, check polarity, then connect USB and upload.
+Sort components and wires by `buildStep`; instructions reference their IDs. Unity must supply the Uno prefab, choose the body pose from the mount side, and measure its D13/GND pin anchors. Wire with USB disconnected, check polarity, then connect USB and upload.
 
 `physicalVerified=false` is intentional: the source has no real continuity measurements, switch footprint, normalized meshes, or physical board certification. The validator proves connectivity under the documented model, not the real-world build. The button's 7.62 mm square pin arrangement must match the actual kit. The raw source's `placement.json` only demonstrates syntax; use this folder's complete validated fixtures for integration.

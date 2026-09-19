@@ -1,5 +1,6 @@
 import type { Placement } from '../types/circuit'
-import { partNames, pinNames, pinShort } from '../lib/names'
+import { endpointLabel, partNames, pinNames, pinShort, terminalOrder } from '../lib/names'
+import { addressToHole } from '../lib/addresses'
 
 interface Props {
   placement: Placement
@@ -16,24 +17,26 @@ interface Row {
 
 export function ConnectionsPanel({ placement, selectedRow, onFocus, onClear }: Props) {
   const rows: Row[] = []
-  placement.externalConnections?.forEach((c) =>
-    rows.push({
-      ids: [c.id],
-      title: `Arduino ${c.pin} → Breadboard ${c.holeId}`,
-      detail: c.pin === 'GND' ? 'Ground pin (−)' : 'Digital output pin',
-    }),
-  )
-  placement.components.forEach((c) =>
-    c.terminals.forEach((t) =>
+  placement.components.forEach((c) => {
+    const mount = c.mount
+    if (mount.type !== 'breadboard') return
+    terminalOrder[c.type]?.forEach((terminal) => {
+      const address = mount.terminals[terminal]
+      if (!address) return
+      const hole = addressToHole(address) ?? address
       rows.push({
         ids: [c.id],
-        title: `${partNames[c.type] ?? c.type} ${pinShort(t.id)} → Breadboard ${t.holeId}`,
-        detail: `${pinNames[t.id] ?? t.id} · ${c.value}`,
-      }),
-    ),
-  )
+        title: `${partNames[c.type] ?? c.type} ${pinShort(terminal)} → Breadboard ${hole}`,
+        detail: `${pinNames[terminal] ?? terminal} · ${c.value}`,
+      })
+    })
+  })
   placement.jumperWires.forEach((w, i) =>
-    rows.push({ ids: [w.id], title: `Jumper ${i + 1} · ${w.color}`, detail: `${w.fromHole} → ${w.toHole}` }),
+    rows.push({
+      ids: [w.id],
+      title: `Jumper ${i + 1} · ${w.color}`,
+      detail: `${endpointLabel(w.from, placement)} → ${endpointLabel(w.to, placement)}`,
+    }),
   )
   return (
     <section className="wiring" aria-labelledby="conn-title">

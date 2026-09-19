@@ -30,10 +30,10 @@ For a Unity laptop on the same Wi-Fi, set `HOST=0.0.0.0` and restart, then use `
 3. Reject missing inventory or unsupported circuits.
 4. Ask the model to design the directed series connection order and choose a starting row/column. A deterministic placement engine expands the generated design into fixed component footprints and allocates distinct vacant wire endpoints on the reference board. It does not retrieve a predefined circuit layout.
 5. Independently validate schema, inventory, unique hole occupancy, footprints, build order and electrical connectivity in both button states.
-6. Calculate positions and rotations from the checked-in hole map. The model never invents coordinates, asset IDs, validation results or assembly instructions.
+6. Assemble the semantic placement: component mounts mapped to board addresses (`BB1:A15`), jumper endpoint pairs, and named electrical nets. The model never invents coordinates, asset IDs, validation results or assembly instructions; renderers derive coordinates from the checked-in hole map.
 7. Export `placement.json` and atomically save the last valid circuit per session. Unity can poll that session's endpoint.
 
-Scope: one 5 V source, one red LED, one 220 Ω resistor, jumpers, and optionally a momentary button (placement version 1). The existing Arduino path also supports an Uno R3 driving the external LED from D13/GND, steady or blinking one second high/one second low (version 2 with firmware; no separate supply or button). Latching, motors, multiple LEDs and other values are rejected. This is a limited electrical graph validator, not a general simulator or physical inspection system. Prompt interpretation is model-based. The button-LED path passed a prior live OpenRouter check; additional prompts need evaluation.
+Scope: one 5 V source, one red LED, one 220 Ω resistor, jumpers, and optionally a momentary button. The existing Arduino path also supports an Uno R3 driving the external LED from D13/GND, steady or blinking one second high/one second low (external controller mount with firmware; no separate supply or button). Placements are version 3: semantic mounts, endpoint wires and named nets, with no coordinates. Latching, motors, multiple LEDs and other values are rejected. This is a limited electrical graph validator, not a general simulator or physical inspection system. Prompt interpretation is model-based. The button-LED path passed a prior live OpenRouter check; additional prompts need evaluation.
 
 OpenRouter uses its [Structured Outputs API](https://openrouter.ai/docs/guides/features/structured-outputs), `response_format.json_schema`, and `provider.require_parameters=true`. Direct OpenAI integration follows the official [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs): `POST /v1/responses`, `text.format.type=json_schema`, `strict=true`, and `additionalProperties=false`. Refusals, incomplete output, invalid JSON and provider failures return errors without placement data.
 
@@ -48,7 +48,7 @@ OpenRouter uses its [Structured Outputs API](https://openrouter.ai/docs/guides/f
 | POST | `/api/circuits/generate` | Two-stage AI generation; returns the placement object directly |
 | POST | `/api/circuits/demo/button_led` | Explicit validated offline button lesson |
 | POST | `/api/circuits/demo/led` | Explicit validated offline always-on LED lesson |
-| POST | `/api/circuits/demo/arduino_led` | Uno external LED, version 2 with firmware |
+| POST | `/api/circuits/demo/arduino_led` | Uno external LED, external controller mount with firmware |
 | GET | `/api/sessions/{sessionId}/placement` | Last valid placement for that session, including after restart |
 | GET | `/api/schema/placement` | Unity handoff JSON Schema |
 
@@ -88,7 +88,7 @@ Errors contain **only** `{ "error": { "code", "message", "details" } }`; there i
 ## Hand this to the Unity teammate
 
 - [UNITY_TEAM_MESSAGE.md](UNITY_TEAM_MESSAGE.md): a ready-to-send integration message and the details we need from the Unity owner.
-- [UNITY_HANDOFF.md](UNITY_HANDOFF.md): field names, units, axes, rotations, asset requirements and Android calibration conversion.
+- [UNITY_HANDOFF.md](UNITY_HANDOFF.md): the semantic placement v3 contract, address grammar, derivation rules, asset requirements and Android calibration conversion.
 - [fixtures/button_led.placement.json](fixtures/button_led.placement.json): complete validated button lesson.
 - [fixtures/led.placement.json](fixtures/led.placement.json): complete always-on lesson.
 - [schemas/placement.schema.json](schemas/placement.schema.json): the contract.
@@ -110,7 +110,7 @@ The source supplies coordinates but no conductivity or footprint specifications.
 
 The browser now uses direct task labels instead of hackathon/provider slogans, distinguishes ready-made circuits, and renders readable symmetric rails with matching marker sizes and uniform X/Z scale. Mobile scrolling stays within the board. Physical safety guidance remains visible; circuit checks do not certify hardware fit.
 
-Current map: `person2-9d81633+rails1`. All 630 terminal coordinates and component/asset names are unchanged; only 200 rail coordinates moved. This is a modeled correction, **not physical measurement**. See `UNITY_HANDOFF.md` for formulas, version 2 Arduino fields, names and migration. Old saved sessions are not rewritten; regenerate them or retain their old map. The browser refuses mismatched maps. Restart a running API to load the new geometry.
+Current map: `person2-9d81633+rails1`. All 630 terminal coordinates and component/asset names are unchanged; only 200 rail coordinates moved. This is a modeled correction, **not physical measurement**. See `UNITY_HANDOFF.md` for formulas, the placement v3 semantic contract, address grammar and migration. Old saved sessions (pre-v3) are rejected rather than rewritten; regenerate them. The browser refuses mismatched maps and old placement versions. Restart a running API to load new geometry or contracts.
 
 `python -m circuit.export` refreshes the schemas, three fixture pairs, `handoff/board-hole-map.meters.json`, and `handoff/circuit-api-to-unity.zip`. The ZIP contains docs/context, placement schema, all three placement fixtures, map and board assets; it excludes secrets and runtime data. Packaging does not send it to the teammate. `AGENTS.md` preserves the context for future agents.
 

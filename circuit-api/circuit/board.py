@@ -6,6 +6,8 @@ from .contracts import ROOT
 REFERENCE = ROOT / "reference" / "person2"
 RAW_BOARD = json.loads((REFERENCE / "breadboard.json").read_text())
 MODEL = RAW_BOARD["id"]
+# Canonical board id used in semantic placement addresses (BB1:A15, BB1:RAIL:L:+:A:12).
+BOARD_ID = "BB1"
 PITCH_MM = RAW_BOARD["pitch"]
 FRAME = {"units": "meters", "handedness": "left", "originHole": "A1",
          "xAxis": "A1 toward J1", "yAxis": "out of board", "zAxis": "A1 toward A63"}
@@ -41,7 +43,7 @@ for h in RAW_BOARD["holes"]:
         position = vector(RAIL_X[rail] / 1000, 0, (rail_row(segment, index) - 1) * PITCH_MM / 1000)
     HOLES[h["id"]] = {"id": h["id"], "position": position, "net": net}
 
-BOARD = {"model": MODEL, "holeMapVersion": "person2-9d81633+rails1", "physicalVerified": False,
+BOARD = {"id": BOARD_ID, "model": MODEL, "holeMapVersion": "person2-9d81633+rails1", "physicalVerified": False,
          "coordinateFrame": FRAME,
          "calibrationReferences": [{"hole": h, "position": HOLES[h]["position"]} for h in ["A1", "J1", "A63"]]}
 WARNING = ("Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric "

@@ -56,8 +56,8 @@ Outputs
 - Compact BOM list (name ×qty, click to highlight in the circuit) instead of pill chips.
 - Numbered connection rows ("Arduino D13 → Breadboard J8") plus a beginner step mode ("Step 2 of 6", Previous/Next highlighting only that connection) — maps directly to XR later.
 
-Data-model direction
-- Generalize controller rendering from reusable definitions (dimensions, header locations, pin names, power pins, `breadboardMountable`) supporting `placement: "breadboard" | "external"`, `position`, `usedPins[{pin, connectionId}]`, and occupied rows/columns for mounted controllers. No hardcoded Uno drawing in page code. Keep the JSON Unity-exportable.
+Data-model direction (core implemented in placement v3)
+- Controllers are reusable definitions (dimensions, header locations, pin names, power pins, `breadboardMountable`) with a semantic `mount` (`"breadboard" | "external"`, anchor or relativeTo+side) and a terminal map; controller pins attach through ordinary wire endpoints. No hardcoded Uno drawing in page code; keep the JSON Unity-exportable. Breadboard-mounted controllers (Nano/Pico/ESP32 class) remain future work — the server supports the external Uno only.
 - Generation mental model: prompt → interpret → controller → components → electrical validation → topology → MCU placement (mounted|external) → route wires → render scene.
 
 Priority order: Generate under the prompt; optional collapsed advanced setup; MCU rendered in the canvas; external vs mounted layouts; real MCU pin→hole connections; canvas visual priority; remove redundant copy and nested cards; deemphasize Session ID; interactive connection highlighting; keep the existing visual identity.

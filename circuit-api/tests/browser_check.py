@@ -73,9 +73,8 @@ def check():
             page.locator("#preview").evaluate("e => e.scrollTop = 0")
             page.locator("#board-view").select_option("circuit")
             # Neither end of rail segment A is in this crop: stripes must still span visible holes.
-            page.evaluate("""() => __circuit.show({components:[],jumperWires:[],externalConnections:[{
-                id:'crop-test',pin:'D13',holeId:'J16',boardPosition:__circuit.board.holes.find(h=>h.id==='J16').position
-            }]})""")
+            page.evaluate("""() => __circuit.show({version:3, components:[], nets:[], jumperWires:[{
+                id:'crop-test', from:'BB1:J16', to:'BB1:J17', color:'red', buildStep:1}]})""")
             assert page.locator("[data-rail]").count() == 4
             for stripe in page.locator("[data-rail]").all():
                 assert float(stripe.get_attribute("y2")) - float(stripe.get_attribute("y1")) > 16

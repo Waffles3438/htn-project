@@ -85,6 +85,7 @@ h3 { font-size: 14px; margin: 0 }
 .validation { font-size: 12px; color: #586960; margin: 0 0 14px }
 .validation summary { cursor: pointer }
 .validation ul { margin: 8px 0; padding-left: 18px; line-height: 1.7 }
+.validation .nets b { color: #46634f; font-family: ui-monospace, monospace; font-size: 11px }
 .validation .warnings { color: #8a5a2e }
 
 .session-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 10px; flex-wrap: wrap }

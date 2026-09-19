@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "sessionId": "demo-button-led",
   "breadboardModel": "demo_breadboard_v1",
   "title": "Arduino Uno \u00b7 blinking LED",
@@ -9,41 +9,7 @@
   "breadboard": {
     "model": "demo_breadboard_v1",
     "holeMapVersion": "person2-9d81633+rails1",
-    "physicalVerified": false,
-    "coordinateFrame": {
-      "units": "meters",
-      "handedness": "left",
-      "originHole": "A1",
-      "xAxis": "A1 toward J1",
-      "yAxis": "out of board",
-      "zAxis": "A1 toward A63"
-    },
-    "calibrationReferences": [
-      {
-        "hole": "A1",
-        "position": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      {
-        "hole": "J1",
-        "position": {
-          "x": 0.02794,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      {
-        "hole": "A63",
-        "position": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.15748
-        }
-      }
-    ]
+    "physicalVerified": false
   },
   "requiredParts": [
     {
@@ -73,36 +39,13 @@
       "type": "led",
       "value": "red",
       "assetId": "led_red_v1",
-      "terminals": [
-        {
-          "id": "anode",
-          "holeId": "A15",
-          "position": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.03556
-          }
-        },
-        {
-          "id": "cathode",
-          "holeId": "A16",
-          "position": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0381
-          }
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "anode": "BB1:A15",
+          "cathode": "BB1:A16"
         }
-      ],
-      "position": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.03683
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.70710678,
-        "z": 0,
-        "w": 0.70710678
       },
       "buildStep": 1
     },
@@ -111,36 +54,13 @@
       "type": "resistor",
       "value": "220ohm",
       "assetId": "resistor_220ohm_v1",
-      "terminals": [
-        {
-          "id": "a",
-          "holeId": "B12",
-          "position": {
-            "x": 0.00254,
-            "y": 0.0,
-            "z": 0.02794
-          }
-        },
-        {
-          "id": "b",
-          "holeId": "B15",
-          "position": {
-            "x": 0.00254,
-            "y": 0.0,
-            "z": 0.03556
-          }
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "a": "BB1:B12",
+          "b": "BB1:B15"
         }
-      ],
-      "position": {
-        "x": 0.00254,
-        "y": 0.0,
-        "z": 0.03175
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.70710678,
-        "z": 0,
-        "w": 0.70710678
       },
       "buildStep": 2
     }
@@ -148,37 +68,40 @@
   "jumperWires": [
     {
       "id": "wire_1",
-      "fromHole": "I1",
-      "toHole": "C12",
+      "from": "mcu_1:D13",
+      "to": "BB1:C12",
       "color": "red",
-      "buildStep": 3,
-      "startPosition": {
-        "x": 0.0254,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "endPosition": {
-        "x": 0.00508,
-        "y": 0.0,
-        "z": 0.02794
-      }
+      "buildStep": 3
     },
     {
       "id": "wire_3",
-      "fromHole": "C16",
-      "toHole": "I2",
+      "from": "BB1:C16",
+      "to": "mcu_1:GND",
       "color": "black",
-      "buildStep": 4,
-      "startPosition": {
-        "x": 0.00508,
-        "y": 0.0,
-        "z": 0.0381
-      },
-      "endPosition": {
-        "x": 0.0254,
-        "y": 0.0,
-        "z": 0.00254
-      }
+      "buildStep": 4
+    }
+  ],
+  "nets": [
+    {
+      "id": "LED_SIGNAL",
+      "members": [
+        "led_1:anode",
+        "resistor_1:b"
+      ]
+    },
+    {
+      "id": "GND",
+      "members": [
+        "led_1:cathode",
+        "mcu_1:GND"
+      ]
+    },
+    {
+      "id": "SIGNAL_1",
+      "members": [
+        "mcu_1:D13",
+        "resistor_1:a"
+      ]
     }
   ],
   "validation": {
@@ -199,7 +122,7 @@
     ],
     "warnings": [
       "Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric layout, not measured hardware (rails 3 pitches outside A and J, 5-hole groups spanning rows 3-61), because the source rails were asymmetric; see UNITY_HANDOFF.md. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs.",
-      "Uno R3 only: D13 drives one red LED through 220 ohm. Uno pose and pin anchors must be measured separately in Unity. Firmware has not been uploaded to physical hardware."
+      "Uno R3 only: D13 drives one red LED through 220 ohm. Unity derives the Uno pose from its external mount plus measured pin anchors. Firmware has not been uploaded to physical hardware."
     ]
   },
   "instructions": [
@@ -234,48 +157,24 @@
     {
       "step": 5,
       "componentIds": [
-        "power_1",
-        "external_d13",
-        "external_gnd"
+        "mcu_1",
+        "wire_1",
+        "wire_3"
       ],
-      "text": "With USB disconnected, connect Uno D13 \u2192 J1, GND \u2192 J2. Check wiring, then connect USB and upload circuit.ino."
+      "text": "With USB disconnected, connect Uno D13 \u2192 I1, GND \u2192 I2. Check wiring, then connect USB and upload circuit.ino."
     }
   ],
   "externalDevices": [
     {
-      "id": "power_1",
+      "id": "mcu_1",
       "type": "arduino_uno",
       "model": "uno_r3",
       "assetId": "arduino_uno_r3_v1",
-      "placementMode": "separate_anchor_required"
-    }
-  ],
-  "externalConnections": [
-    {
-      "id": "external_d13",
-      "deviceId": "power_1",
-      "pin": "D13",
-      "holeId": "J1",
-      "boardPosition": {
-        "x": 0.02794,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "color": "red",
-      "buildStep": 5
-    },
-    {
-      "id": "external_gnd",
-      "deviceId": "power_1",
-      "pin": "GND",
-      "holeId": "J2",
-      "boardPosition": {
-        "x": 0.02794,
-        "y": 0.0,
-        "z": 0.00254
-      },
-      "color": "black",
-      "buildStep": 5
+      "mount": {
+        "type": "external",
+        "relativeTo": "BB1",
+        "side": "left"
+      }
     }
   ],
   "firmware": {

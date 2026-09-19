@@ -1,3 +1,5 @@
+import { endpointParts } from './addresses'
+
 export const partNames: Record<string, string> = {
   led: 'Red LED',
   resistor: 'Resistor',
@@ -18,6 +20,13 @@ export const schematicColors: Record<string, string> = {
   yellow: '#bfa242',
   blue: '#6497a1',
   green: '#6d9450',
+}
+
+export const terminalOrder: Record<string, string[]> = {
+  power_supply: ['positive', 'negative'],
+  led: ['anode', 'cathode'],
+  resistor: ['a', 'b'],
+  button: ['a1', 'a2', 'b1', 'b2'],
 }
 
 export const pinNames: Record<string, string> = {
@@ -48,4 +57,17 @@ const pinShortNames: Record<string, string> = {
 
 export function pinShort(id: string): string {
   return pinShortNames[id] ?? id
+}
+
+// Human label for a semantic endpoint: board holes render as their hole id,
+// controller pins as "Uno D13", mounted terminals as "Red LED anode (+)".
+export function endpointLabel(endpoint: string, placement: { components: { id: string; type: string }[]; externalDevices?: { id: string }[] } | null): string {
+  if (endpoint.startsWith('BB1:')) return endpoint.slice(4)
+  const parts = endpointParts(endpoint)
+  if (!parts) return endpoint
+  const [componentId, terminal] = parts
+  if (placement?.externalDevices?.some((d) => d.id === componentId)) return `Uno ${terminal}`
+  const component = placement?.components.find((c) => c.id === componentId)
+  if (component) return `${partNames[component.type] ?? component.type} ${pinShort(terminal)}`
+  return endpoint
 }
