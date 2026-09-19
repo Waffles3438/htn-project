@@ -2,8 +2,18 @@
 .gradle-user-home/
 .kotlin/
 .idea/
+.venv/
+.backboard/
+.env
+.env.*
 local.properties
 build/
 app/build/
 *.iml
 captures/
+
+# Python local runtime data
+circuit-api/.venv/
+circuit-api/.backboard/
+circuit-api/.env
+circuit-api/data/
