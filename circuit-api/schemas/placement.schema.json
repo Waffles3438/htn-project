@@ -1,117 +1,271 @@
 {
-  "type": "object",
-  "properties": {
-    "version": {
-      "type": "integer",
-      "const": 1
-    },
-    "sessionId": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{1,64}$"
-    },
-    "breadboardModel": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 2000
-    },
-    "title": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 2000
-    },
-    "prompt": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 2000
-    },
-    "source": {
-      "type": "string",
-      "enum": [
-        "openai",
-        "openrouter",
-        "fixture"
-      ]
-    },
-    "generatedAt": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 2000
-    },
-    "breadboard": {
+  "oneOf": [
+    {
       "type": "object",
       "properties": {
-        "model": {
+        "version": {
+          "type": "integer",
+          "const": 1
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "breadboardModel": {
           "type": "string",
           "minLength": 1,
           "maxLength": 2000
         },
-        "holeMapVersion": {
+        "title": {
           "type": "string",
           "minLength": 1,
           "maxLength": 2000
         },
-        "physicalVerified": {
-          "type": "boolean"
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
         },
-        "coordinateFrame": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "openrouter",
+            "fixture"
+          ]
+        },
+        "generatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "breadboard": {
           "type": "object",
           "properties": {
-            "units": {
+            "model": {
               "type": "string",
-              "enum": [
-                "meters"
-              ]
+              "minLength": 1,
+              "maxLength": 2000
             },
-            "handedness": {
+            "holeMapVersion": {
               "type": "string",
-              "enum": [
-                "left"
-              ]
+              "minLength": 1,
+              "maxLength": 2000
             },
-            "originHole": {
-              "type": "string",
-              "enum": [
-                "A1"
-              ]
+            "physicalVerified": {
+              "type": "boolean"
             },
-            "xAxis": {
-              "type": "string",
-              "enum": [
-                "A1 toward J1"
-              ]
+            "coordinateFrame": {
+              "type": "object",
+              "properties": {
+                "units": {
+                  "type": "string",
+                  "enum": [
+                    "meters"
+                  ]
+                },
+                "handedness": {
+                  "type": "string",
+                  "enum": [
+                    "left"
+                  ]
+                },
+                "originHole": {
+                  "type": "string",
+                  "enum": [
+                    "A1"
+                  ]
+                },
+                "xAxis": {
+                  "type": "string",
+                  "enum": [
+                    "A1 toward J1"
+                  ]
+                },
+                "yAxis": {
+                  "type": "string",
+                  "enum": [
+                    "out of board"
+                  ]
+                },
+                "zAxis": {
+                  "type": "string",
+                  "enum": [
+                    "A1 toward A63"
+                  ]
+                }
+              },
+              "required": [
+                "units",
+                "handedness",
+                "originHole",
+                "xAxis",
+                "yAxis",
+                "zAxis"
+              ],
+              "additionalProperties": false
             },
-            "yAxis": {
-              "type": "string",
-              "enum": [
-                "out of board"
-              ]
-            },
-            "zAxis": {
-              "type": "string",
-              "enum": [
-                "A1 toward A63"
-              ]
+            "calibrationReferences": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "hole": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "z": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "hole",
+                  "position"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "required": [
-            "units",
-            "handedness",
-            "originHole",
-            "xAxis",
-            "yAxis",
-            "zAxis"
+            "model",
+            "holeMapVersion",
+            "physicalVerified",
+            "coordinateFrame",
+            "calibrationReferences"
           ],
           "additionalProperties": false
         },
-        "calibrationReferences": {
+        "requiredParts": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "hole": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button",
+                  "arduino_uno",
+                  "jumper_wire",
+                  "jumper"
+                ]
+              },
+              "value": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 2000
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 30
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "quantity"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "terminals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "holeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "position": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "holeId",
+                    "position"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 2,
+                "maxItems": 4
               },
               "position": {
                 "type": "object",
@@ -132,372 +286,887 @@
                   "z"
                 ],
                 "additionalProperties": false
+              },
+              "rotation": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  },
+                  "w": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z",
+                  "w"
+                ],
+                "additionalProperties": false
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
               }
             },
             "required": [
-              "hole",
-              "position"
+              "id",
+              "type",
+              "value",
+              "assetId",
+              "terminals",
+              "position",
+              "rotation",
+              "buildStep"
             ],
             "additionalProperties": false
           },
           "minItems": 3,
-          "maxItems": 3
+          "maxItems": 4
+        },
+        "jumperWires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "fromHole": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "toHole": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "color": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "startPosition": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "endPosition": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "fromHole",
+              "toHole",
+              "color",
+              "startPosition",
+              "endPosition",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 12
+        },
+        "validation": {
+          "type": "object",
+          "properties": {
+            "valid": {
+              "type": "boolean",
+              "const": true
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "valid",
+            "checks",
+            "warnings"
+          ],
+          "additionalProperties": false
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "componentIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+                },
+                "minItems": 0,
+                "maxItems": 100
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "step",
+              "componentIds",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 100
         }
       },
       "required": [
-        "model",
-        "holeMapVersion",
-        "physicalVerified",
-        "coordinateFrame",
-        "calibrationReferences"
+        "version",
+        "sessionId",
+        "breadboardModel",
+        "title",
+        "prompt",
+        "source",
+        "generatedAt",
+        "breadboard",
+        "requiredParts",
+        "components",
+        "jumperWires",
+        "validation",
+        "instructions"
       ],
       "additionalProperties": false
     },
-    "requiredParts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "power_supply",
-              "led",
-              "resistor",
-              "button",
-              "jumper_wire",
-              "jumper"
-            ]
-          },
-          "value": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
-          "quantity": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 30
-          }
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "const": 2
         },
-        "required": [
-          "type",
-          "value",
-          "quantity"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 1,
-      "maxItems": 8
-    },
-    "components": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "power_supply",
-              "led",
-              "resistor",
-              "button"
-            ]
-          },
-          "value": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
-          "assetId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
-          "terminals": {
-            "type": "array",
-            "items": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "breadboardModel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "openrouter",
+            "fixture"
+          ]
+        },
+        "generatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "breadboard": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "holeMapVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "physicalVerified": {
+              "type": "boolean"
+            },
+            "coordinateFrame": {
               "type": "object",
               "properties": {
-                "id": {
+                "units": {
                   "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2000
+                  "enum": [
+                    "meters"
+                  ]
                 },
-                "holeId": {
+                "handedness": {
                   "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2000
+                  "enum": [
+                    "left"
+                  ]
                 },
-                "position": {
-                  "type": "object",
-                  "properties": {
-                    "x": {
-                      "type": "number"
-                    },
-                    "y": {
-                      "type": "number"
-                    },
-                    "z": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "x",
-                    "y",
-                    "z"
-                  ],
-                  "additionalProperties": false
+                "originHole": {
+                  "type": "string",
+                  "enum": [
+                    "A1"
+                  ]
+                },
+                "xAxis": {
+                  "type": "string",
+                  "enum": [
+                    "A1 toward J1"
+                  ]
+                },
+                "yAxis": {
+                  "type": "string",
+                  "enum": [
+                    "out of board"
+                  ]
+                },
+                "zAxis": {
+                  "type": "string",
+                  "enum": [
+                    "A1 toward A63"
+                  ]
                 }
               },
               "required": [
-                "id",
-                "holeId",
-                "position"
+                "units",
+                "handedness",
+                "originHole",
+                "xAxis",
+                "yAxis",
+                "zAxis"
               ],
               "additionalProperties": false
             },
-            "minItems": 2,
-            "maxItems": 4
+            "calibrationReferences": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "hole": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "z": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "hole",
+                  "position"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
           },
-          "position": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y",
-              "z"
-            ],
-            "additionalProperties": false
-          },
-          "rotation": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              },
-              "w": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y",
-              "z",
-              "w"
-            ],
-            "additionalProperties": false
-          },
-          "buildStep": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          }
+          "required": [
+            "model",
+            "holeMapVersion",
+            "physicalVerified",
+            "coordinateFrame",
+            "calibrationReferences"
+          ],
+          "additionalProperties": false
         },
-        "required": [
-          "id",
-          "type",
-          "value",
-          "assetId",
-          "terminals",
-          "position",
-          "rotation",
-          "buildStep"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 3,
-      "maxItems": 4
-    },
-    "jumperWires": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
-          },
-          "fromHole": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
-          "toHole": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
-          "color": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          },
-          "startPosition": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y",
-              "z"
-            ],
-            "additionalProperties": false
-          },
-          "endPosition": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y",
-              "z"
-            ],
-            "additionalProperties": false
-          },
-          "buildStep": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          }
-        },
-        "required": [
-          "id",
-          "fromHole",
-          "toHole",
-          "color",
-          "startPosition",
-          "endPosition",
-          "buildStep"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 0,
-      "maxItems": 12
-    },
-    "validation": {
-      "type": "object",
-      "properties": {
-        "valid": {
-          "type": "boolean",
-          "const": true
-        },
-        "checks": {
+        "requiredParts": {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button",
+                  "arduino_uno",
+                  "jumper_wire",
+                  "jumper"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 30
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "quantity"
+            ],
+            "additionalProperties": false
           },
-          "minItems": 0,
-          "maxItems": 100
+          "minItems": 1,
+          "maxItems": 8
         },
-        "warnings": {
+        "components": {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "terminals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "holeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "position": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "holeId",
+                    "position"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 2,
+                "maxItems": 4
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "rotation": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  },
+                  "w": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z",
+                  "w"
+                ],
+                "additionalProperties": false
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "value",
+              "assetId",
+              "terminals",
+              "position",
+              "rotation",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "jumperWires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "fromHole": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "toHole": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "color": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "startPosition": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "endPosition": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "fromHole",
+              "toHole",
+              "color",
+              "startPosition",
+              "endPosition",
+              "buildStep"
+            ],
+            "additionalProperties": false
           },
           "minItems": 0,
+          "maxItems": 12
+        },
+        "validation": {
+          "type": "object",
+          "properties": {
+            "valid": {
+              "type": "boolean",
+              "const": true
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "valid",
+            "checks",
+            "warnings"
+          ],
+          "additionalProperties": false
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "componentIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+                },
+                "minItems": 0,
+                "maxItems": 100
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "step",
+              "componentIds",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
           "maxItems": 100
+        },
+        "externalDevices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "arduino_uno"
+                ]
+              },
+              "model": {
+                "type": "string",
+                "enum": [
+                  "uno_r3"
+                ]
+              },
+              "assetId": {
+                "type": "string",
+                "enum": [
+                  "arduino_uno_r3_v1"
+                ]
+              },
+              "placementMode": {
+                "type": "string",
+                "enum": [
+                  "separate_anchor_required"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "model",
+              "assetId",
+              "placementMode"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "externalConnections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "deviceId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "pin": {
+                "type": "string",
+                "enum": [
+                  "D13",
+                  "GND"
+                ]
+              },
+              "holeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "boardPosition": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "color": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "deviceId",
+              "pin",
+              "holeId",
+              "boardPosition",
+              "color",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "firmware": {
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string",
+              "enum": [
+                "circuit.ino"
+              ]
+            },
+            "board": {
+              "type": "string",
+              "enum": [
+                "Arduino Uno R3"
+              ]
+            },
+            "language": {
+              "type": "string",
+              "enum": [
+                "arduino"
+              ]
+            },
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "uploadInstructions": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "filename",
+            "board",
+            "language",
+            "code",
+            "uploadInstructions"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "valid",
-        "checks",
-        "warnings"
+        "version",
+        "sessionId",
+        "breadboardModel",
+        "title",
+        "prompt",
+        "source",
+        "generatedAt",
+        "breadboard",
+        "requiredParts",
+        "components",
+        "jumperWires",
+        "validation",
+        "instructions",
+        "externalDevices",
+        "externalConnections",
+        "firmware"
       ],
       "additionalProperties": false
-    },
-    "instructions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "step": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
-          "componentIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
-            },
-            "minItems": 0,
-            "maxItems": 100
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
-        },
-        "required": [
-          "step",
-          "componentIds",
-          "text"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 1,
-      "maxItems": 100
     }
-  },
-  "required": [
-    "version",
-    "sessionId",
-    "breadboardModel",
-    "title",
-    "prompt",
-    "source",
-    "generatedAt",
-    "breadboard",
-    "requiredParts",
-    "components",
-    "jumperWires",
-    "validation",
-    "instructions"
-  ],
-  "additionalProperties": false
+  ]
 }

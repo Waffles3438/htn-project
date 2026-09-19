@@ -1,6 +1,8 @@
 """Regenerate reviewable Unity handoff fixtures and schemas: python -m circuit.export."""
 import json
+from zipfile import ZipFile, ZIP_DEFLATED
 from . import contracts
+from .board import hole_map
 from .fixtures import fixture, request_for, PROMPTS
 from .service import make_placement
 
@@ -17,6 +19,18 @@ def export():
         for suffix, value in [("request", request), ("placement", placement)]:
             (directory / (name + "." + suffix + ".json")).write_text(json.dumps(value, indent=2) + "\n")
         print("Exported", name)
+    handoff = contracts.ROOT / "handoff"
+    handoff.mkdir(exist_ok=True)
+    board_path = handoff / "board-hole-map.meters.json"
+    board_path.write_text(json.dumps(hole_map(), indent=2) + "\n")
+    files = ["UNITY_HANDOFF.md", "UNITY_TEAM_MESSAGE.md", "AGENTS.md", "schemas/placement.schema.json",
+             "reference/assets/breadboard.fbx", "reference/assets/breadboard.metadata.json"]
+    files += ["fixtures/" + name + ".placement.json" for name in PROMPTS]
+    with ZipFile(handoff / "circuit-api-to-unity.zip", "w", ZIP_DEFLATED) as archive:
+        for name in files:
+            archive.write(contracts.ROOT / name, name)
+        archive.write(board_path, board_path.name)
+    print("Exported Unity handoff")
 
 
 if __name__ == "__main__":

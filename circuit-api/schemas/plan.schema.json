@@ -11,6 +11,7 @@
       "enum": [
         "always_on",
         "while_pressed",
+        "blink",
         "unsupported"
       ]
     },
@@ -34,7 +35,8 @@
               "power_supply",
               "led",
               "resistor",
-              "button"
+              "button",
+              "arduino_uno"
             ]
           },
           "value": {

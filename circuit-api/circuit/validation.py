@@ -28,7 +28,7 @@ def normalize_value(value):
     return value.lower().replace(" ", "").replace("ω", "ohm").replace("ohms", "ohm")
 
 
-CATALOG = {"power_supply": "5v", "led": "red", "resistor": "220ohm", "button": "momentary", "jumper_wire": "male-male"}
+CATALOG = {"arduino_uno": "unor3", "power_supply": "5v", "led": "red", "resistor": "220ohm", "button": "momentary", "jumper_wire": "male-male"}
 PINS = {"power_supply": {"positive", "negative"}, "led": {"anode", "cathode"},
         "resistor": {"a", "b"}, "button": {"a1", "a2", "b1", "b2"}}
 
@@ -41,7 +41,7 @@ def validate_request(request):
     for part in request["availableParts"]:
         value = normalize_value(part["value"])
         kind = "jumper_wire" if part["type"] == "jumper" else part["type"]
-        require(value == CATALOG[kind], "UNSUPPORTED_PART", "The demo supports only the fixed 5 V / red LED / 220 ohm kit.")
+        require(value == CATALOG[kind], "UNSUPPORTED_PART", "Choose a supported kit value: red LED, 220 ohm, momentary button, 5V supply, or Uno R3.")
         inventory[(kind, value)] += part["quantity"]
     return inventory
 
@@ -52,10 +52,13 @@ def validate_plan(plan, inventory):
     ids = [c["id"] for c in plan["components"]]
     require(len(ids) == len(set(ids)), "DUPLICATE_ID", "Component IDs must be unique.")
     counts = Counter(c["type"] for c in plan["components"])
-    expected = Counter({"power_supply": 1, "led": 1, "resistor": 1})
+    mcu = counts.get("arduino_uno", 0) > 0
+    require(not mcu or plan["behavior"] in ("always_on", "blink"), "UNSUPPORTED_CIRCUIT", "Uno R3 currently supports an always-on or one-second blinking external LED.")
+    require(plan["behavior"] != "blink" or mcu, "UNSUPPORTED_CIRCUIT", "Blinking requires an Arduino Uno R3.")
+    expected = Counter({"arduino_uno" if mcu else "power_supply": 1, "led": 1, "resistor": 1})
     if plan["behavior"] == "while_pressed":
         expected["button"] = 1
-    require(counts == expected, "UNSUPPORTED_CIRCUIT", "V1 supports one LED and one series resistor, optionally controlled by one momentary button.")
+    require(counts == expected, "UNSUPPORTED_CIRCUIT", "Use one source/controller, one red LED and one 220 ohm resistor. A series button is supported with the 5 V supply.")
     missing = []
     for c in plan["components"]:
         value = normalize_value(c["value"])

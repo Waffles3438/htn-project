@@ -8,7 +8,7 @@
   "generatedAt": "2026-09-19T00:00:00+00:00",
   "breadboard": {
     "model": "demo_breadboard_v1",
-    "holeMapVersion": "person2-9d81633",
+    "holeMapVersion": "person2-9d81633+rails1",
     "physicalVerified": false,
     "coordinateFrame": {
       "units": "meters",
@@ -233,7 +233,7 @@
       "requested_button_behavior"
     ],
     "warnings": [
-      "Geometry comes from person2 commit 9d81633. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs."
+      "Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric layout, not measured hardware (rails 3 pitches outside A and J, 5-hole groups spanning rows 3-61), because the source rails were asymmetric; see UNITY_HANDOFF.md. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs."
     ]
   },
   "instructions": [
@@ -242,14 +242,14 @@
       "componentIds": [
         "led_1"
       ],
-      "text": "With power disconnected, place led (red): anode \u2192 A15, cathode \u2192 A16. The long lead is normally the anode; verify the flat side/short lead is the cathode."
+      "text": "With power disconnected, place led (red): anode (+, long lead) \u2192 A15, cathode (\u2212, short lead) \u2192 A16. The long lead is normally the anode; verify the flat side/short lead is the cathode."
     },
     {
       "step": 2,
       "componentIds": [
         "resistor_1"
       ],
-      "text": "With power disconnected, place resistor (220ohm): a \u2192 B12, b \u2192 B15."
+      "text": "With power disconnected, place resistor (220ohm): lead A \u2192 B12, lead B \u2192 B15."
     },
     {
       "step": 3,
@@ -270,7 +270,7 @@
       "componentIds": [
         "power_1"
       ],
-      "text": "After checking the full circuit, connect the external 5 V source last: positive \u2192 J1, negative \u2192 J2."
+      "text": "After checking the full circuit, connect the external 5 V source last: +5V (+) \u2192 J1, GND (\u2212) \u2192 J2."
     }
   ]
 }

@@ -17,6 +17,9 @@ ORDER = {"led": ["anode", "cathode"], "resistor": ["a", "b"], "button": ["a1", "
 
 
 def make_placement(request, plan, draft, source):
+    if any(c["type"] == "arduino_uno" for c in plan["components"]):
+        from .mcu import make_mcu_placement
+        return make_mcu_placement(request, plan, draft, source)
     inventory = validate_request(request)
     checks = validate_layout(plan, draft, inventory)
     definitions = {c["id"]: c for c in plan["components"]}
@@ -33,7 +36,8 @@ def make_placement(request, plan, draft, source):
         rotation = {"x": 0, "y": round(math.sin(yaw/2), 8), "z": 0, "w": round(math.cos(yaw/2), 8)}
         components.append({"id": c["id"], "type": kind, "value": definition["value"], "assetId": ASSETS[kind],
                            "terminals": terminals, "position": position, "rotation": rotation, "buildStep": c["buildStep"]})
-        leads = ", ".join(t["id"] + " → " + t["holeId"] for t in terminals)
+        labels = {"positive": "+5V (+)", "negative": "GND (−)", "anode": "anode (+, long lead)", "cathode": "cathode (−, short lead)", "a": "lead A", "b": "lead B"}
+        leads = ", ".join(labels.get(t["id"], t["id"].upper()) + " → " + t["holeId"] for t in terminals)
         text = "With power disconnected, place %s (%s): %s." % (kind.replace("_", " "), definition["value"], leads)
         if kind == "led":
             text += " The long lead is normally the anode; verify the flat side/short lead is the cathode."

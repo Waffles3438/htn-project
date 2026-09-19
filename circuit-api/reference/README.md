@@ -9,7 +9,9 @@
 
 Copied into the circuit owner's folder to avoid merging unrelated branch changes (including checked-in `node_modules`). The source board has 830 holes: 630 terminal-strip holes and 200 rail holes. Its coordinate axes are X right, Y up, Z forward; coordinates are millimeters.
 
-The API preserves raw files, converts positions to meters, adds documented electrical connectivity assumptions, and uses the existing LED asset ID. See `../UNITY_HANDOFF.md` for footprint, dimensions and asset gaps. The upstream `placement.json` is a syntax example and is not used as a valid circuit.
+The API preserves raw files and all 630 A–J terminal coordinates (converted to meters), adds documented electrical connectivity assumptions, and uses the existing LED asset ID. Runtime map `person2-9d81633+rails1` changes only the 200 rail positions to a symmetric model with five-hole groups. This is not measured hardware; `physicalVerified` remains false. See `../UNITY_HANDOFF.md` for exact old/new coordinates, migration, footprints and asset gaps. The upstream `placement.json` is a syntax example and is not used as a valid circuit.
+
+Keep the raw snapshot untouched. Old saved placements are not automatically migrated; regenerate against the current map or retain the matching old map. Browser circle size is schematic, not a physical aperture measurement. Browser and XR must share versioned geometry, not UI-only coordinate shifts.
 
 When the hardware owner changes this data, refresh all four files from the reviewed commit, update `holeMapVersion`/provenance, rerun tests, regenerate fixtures, and coordinate any frame changes with Unity. Do not silently regenerate coordinates from the nominal dimensions.
 

@@ -19,8 +19,10 @@ def place_series(plan, design):
             occupied.add(hole)
         return {"id": cid, "terminals": [{"name": name, "hole": hole} for name, hole in pins.items()], "buildStep": step}
 
-    supply = component(supply_id, {"positive": "J1", "negative": "J2"}, 1)
-    previous = "J1"
+    source_column = "J" if column in "ABCD" else "A"
+    positive, negative = source_column + str(row-2), source_column + str(row-1)
+    supply = component(supply_id, {"positive": positive, "negative": negative}, 1)
+    previous = positive
     for index, cid in enumerate(path):
         kind = definitions[cid]["type"]
         if kind == "button":
@@ -36,7 +38,7 @@ def place_series(plan, design):
         links.append((previous, entry))
         previous = exit_hole
         row += span + 3
-    links.append((previous, "J2"))
+    links.append((previous, negative))
 
     def wire_endpoint(terminal):
         target = HOLES[terminal]

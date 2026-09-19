@@ -1,9 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
   "sessionId": "demo-button-led",
   "breadboardModel": "demo_breadboard_v1",
-  "title": "Button-controlled LED",
-  "prompt": "Turn on an LED when a button is pressed",
+  "title": "Arduino Uno \u00b7 blinking LED",
+  "prompt": "Blink an external red LED every second using an Arduino Uno R3",
   "source": "fixture",
   "generatedAt": "2026-09-19T00:00:00+00:00",
   "breadboard": {
@@ -47,8 +47,8 @@
   },
   "requiredParts": [
     {
-      "type": "power_supply",
-      "value": "5V",
+      "type": "arduino_uno",
+      "value": "Uno R3",
       "quantity": 1
     },
     {
@@ -62,14 +62,9 @@
       "quantity": 1
     },
     {
-      "type": "button",
-      "value": "momentary",
-      "quantity": 1
-    },
-    {
       "type": "jumper_wire",
       "value": "male-male",
-      "quantity": 3
+      "quantity": 4
     }
   ],
   "components": [
@@ -148,130 +143,19 @@
         "w": 0.70710678
       },
       "buildStep": 2
-    },
-    {
-      "id": "button_1",
-      "type": "button",
-      "value": "momentary",
-      "assetId": "button_momentary_v1",
-      "terminals": [
-        {
-          "id": "a1",
-          "holeId": "E8",
-          "position": {
-            "x": 0.01016,
-            "y": 0.0,
-            "z": 0.01778
-          }
-        },
-        {
-          "id": "b1",
-          "holeId": "F8",
-          "position": {
-            "x": 0.01778,
-            "y": 0.0,
-            "z": 0.01778
-          }
-        },
-        {
-          "id": "a2",
-          "holeId": "E11",
-          "position": {
-            "x": 0.01016,
-            "y": 0.0,
-            "z": 0.0254
-          }
-        },
-        {
-          "id": "b2",
-          "holeId": "F11",
-          "position": {
-            "x": 0.01778,
-            "y": 0.0,
-            "z": 0.0254
-          }
-        }
-      ],
-      "position": {
-        "x": 0.01397,
-        "y": 0.0,
-        "z": 0.02159
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.0,
-        "z": 0,
-        "w": 1.0
-      },
-      "buildStep": 3
-    },
-    {
-      "id": "power_1",
-      "type": "power_supply",
-      "value": "5V",
-      "assetId": "power_supply_5v_v1",
-      "terminals": [
-        {
-          "id": "positive",
-          "holeId": "J1",
-          "position": {
-            "x": 0.02794,
-            "y": 0.0,
-            "z": 0.0
-          }
-        },
-        {
-          "id": "negative",
-          "holeId": "J2",
-          "position": {
-            "x": 0.02794,
-            "y": 0.0,
-            "z": 0.00254
-          }
-        }
-      ],
-      "position": {
-        "x": 0.02794,
-        "y": 0.0,
-        "z": 0.00127
-      },
-      "rotation": {
-        "x": 0,
-        "y": -0.70710678,
-        "z": 0,
-        "w": 0.70710678
-      },
-      "buildStep": 7
     }
   ],
   "jumperWires": [
     {
       "id": "wire_1",
       "fromHole": "I1",
-      "toHole": "D8",
+      "toHole": "C12",
       "color": "red",
-      "buildStep": 4,
+      "buildStep": 3,
       "startPosition": {
         "x": 0.0254,
         "y": 0.0,
         "z": 0.0
-      },
-      "endPosition": {
-        "x": 0.00762,
-        "y": 0.0,
-        "z": 0.01778
-      }
-    },
-    {
-      "id": "wire_2",
-      "fromHole": "G8",
-      "toHole": "C12",
-      "color": "yellow",
-      "buildStep": 5,
-      "startPosition": {
-        "x": 0.02032,
-        "y": 0.0,
-        "z": 0.01778
       },
       "endPosition": {
         "x": 0.00508,
@@ -284,7 +168,7 @@
       "fromHole": "C16",
       "toHole": "I2",
       "color": "black",
-      "buildStep": 6,
+      "buildStep": 4,
       "startPosition": {
         "x": 0.00508,
         "y": 0.0,
@@ -308,10 +192,14 @@
       "power_connected_last",
       "no_supply_short_in_either_button_state",
       "forward_led_with_series_220ohm",
-      "requested_button_behavior"
+      "requested_button_behavior",
+      "uno_d13_high_series_path",
+      "uno_d13_low_no_external_supply",
+      "external_lead_inventory"
     ],
     "warnings": [
-      "Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric layout, not measured hardware (rails 3 pitches outside A and J, 5-hole groups spanning rows 3-61), because the source rails were asymmetric; see UNITY_HANDOFF.md. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs."
+      "Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric layout, not measured hardware (rails 3 pitches outside A and J, 5-hole groups spanning rows 3-61), because the source rails were asymmetric; see UNITY_HANDOFF.md. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs.",
+      "Uno R3 only: D13 drives one red LED through 220 ohm. Uno pose and pin anchors must be measured separately in Unity. Firmware has not been uploaded to physical hardware."
     ]
   },
   "instructions": [
@@ -332,37 +220,69 @@
     {
       "step": 3,
       "componentIds": [
-        "button_1"
+        "wire_1"
       ],
-      "text": "With power disconnected, place button (momentary): A1 \u2192 E8, B1 \u2192 F8, A2 \u2192 E11, B2 \u2192 F11. Verify a1/a2 and b1/b2 are the internally connected pin pairs."
+      "text": "With power disconnected, connect the red jumper from I1 to C12."
     },
     {
       "step": 4,
-      "componentIds": [
-        "wire_1"
-      ],
-      "text": "With power disconnected, connect the red jumper from I1 to D8."
-    },
-    {
-      "step": 5,
-      "componentIds": [
-        "wire_2"
-      ],
-      "text": "With power disconnected, connect the yellow jumper from G8 to C12."
-    },
-    {
-      "step": 6,
       "componentIds": [
         "wire_3"
       ],
       "text": "With power disconnected, connect the black jumper from C16 to I2."
     },
     {
-      "step": 7,
+      "step": 5,
       "componentIds": [
-        "power_1"
+        "power_1",
+        "external_d13",
+        "external_gnd"
       ],
-      "text": "After checking the full circuit, connect the external 5 V source last: +5V (+) \u2192 J1, GND (\u2212) \u2192 J2."
+      "text": "With USB disconnected, connect Uno D13 \u2192 J1, GND \u2192 J2. Check wiring, then connect USB and upload circuit.ino."
     }
-  ]
+  ],
+  "externalDevices": [
+    {
+      "id": "power_1",
+      "type": "arduino_uno",
+      "model": "uno_r3",
+      "assetId": "arduino_uno_r3_v1",
+      "placementMode": "separate_anchor_required"
+    }
+  ],
+  "externalConnections": [
+    {
+      "id": "external_d13",
+      "deviceId": "power_1",
+      "pin": "D13",
+      "holeId": "J1",
+      "boardPosition": {
+        "x": 0.02794,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "color": "red",
+      "buildStep": 5
+    },
+    {
+      "id": "external_gnd",
+      "deviceId": "power_1",
+      "pin": "GND",
+      "holeId": "J2",
+      "boardPosition": {
+        "x": 0.02794,
+        "y": 0.0,
+        "z": 0.00254
+      },
+      "color": "black",
+      "buildStep": 5
+    }
+  ],
+  "firmware": {
+    "filename": "circuit.ino",
+    "board": "Arduino Uno R3",
+    "language": "arduino",
+    "code": "const int LED_PIN = 13;\n\nvoid setup() {\n  pinMode(LED_PIN, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(LED_PIN, HIGH);\n  delay(1000);\n  digitalWrite(LED_PIN, LOW);\n  delay(1000);\n}\n",
+    "uploadInstructions": "Select Arduino Uno and its USB port in Arduino IDE. Wire with USB disconnected; check polarity, then connect USB and upload circuit.ino. No separate 5 V supply is used."
+  }
 }

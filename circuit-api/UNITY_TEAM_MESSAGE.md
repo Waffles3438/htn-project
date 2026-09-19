@@ -1,11 +1,19 @@
 # Message for the Unity teammate
 
+Draft for sharing; not yet sent. Refresh `handoff/circuit-api-to-unity.zip` with `python -m circuit.export` before attaching it.
+
+**2026-09-19 geometry update:** use map `person2-9d81633+rails1`. All 630 A–J coordinates, component/terminal names, asset IDs and calibration references are unchanged. The 200 rail positions now use symmetric X offsets: L+=−0.01016, L−=−0.00762, R+=0.03556, R−=0.03810 meters. Five-hole groups span rows 3–31 in segment A and 33–61 in B; segment nets are unchanged. Exact old/new formulas and migration instructions are in `UNITY_HANDOFF.md`. This is modeled geometry, not a measured physical certification. Please check both rail sides against the FBX and real board.
+
+Check `breadboard.holeMapVersion` before rendering. Old saved sessions are not migrated automatically: regenerate or use their matching old map. Do not mix versions or compensate with UI-only transforms. Browser hole markers are not physical aperture measurements.
+
+The refreshed ZIP also includes the existing Arduino version 2 fixture: `externalDevices` resolves `arduino_uno_r3_v1` with a separate anchor; `externalConnections` supplies breadboard endpoints D13→J1 and GND→J2. Unity must provide the Uno pose and measured D13/GND pin anchors. `firmware` includes `circuit.ino`; physical upload is still unverified. A version-1-only importer should reject version 2 rather than drop these wires.
+
 Our circuit API now takes a prompt, identifies the required components, assigns breadboard holes, validates the circuit, and exports `placement.json`. Can we integrate against the attached handoff package first, using its fixed button + LED fixture?
 
 **What I'm providing**
 
 - `fixtures/button_led.placement.json`: complete circuit, named terminals, hole IDs, local positions, quaternion rotations, asset IDs, wire endpoints and build steps.
-- `board-hole-map.meters.json`: the team's full 830-hole map converted to meters, with the coordinate frame and calibration references.
+- `board-hole-map.meters.json`: the versioned 830-hole runtime map in meters, with the coordinate frame and calibration references.
 - `reference/assets/breadboard.fbx`: supplied breadboard model; its embedded scale/rotation still need normalization.
 - `schemas/placement.schema.json` and `UNITY_HANDOFF.md`: exact field definitions and rendering/alignment notes.
 

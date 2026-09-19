@@ -1,5 +1,6 @@
 """Single source of truth for exported JSON Schemas."""
 import json
+from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,14 +21,14 @@ def string(*values):
 
 ID = {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"}
 STEP = {"type": "integer", "minimum": 1, "maximum": 100}
-TYPE = string("power_supply", "led", "resistor", "button")
-PART = obj(type=string("power_supply", "led", "resistor", "button", "jumper_wire", "jumper"),
+TYPE = string("power_supply", "led", "resistor", "button", "arduino_uno")
+PART = obj(type=string("power_supply", "led", "resistor", "button", "arduino_uno", "jumper_wire", "jumper"),
            value=string(), quantity={"type": "integer", "minimum": 0, "maximum": 30})
 REQUEST = obj(prompt={"type": "string", "minLength": 3, "maxLength": 1000},
               availableParts=arr(PART, 1, 20), breadboardModel=string(),
               sessionId={"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"})
 PLAN_PART = obj(id=ID, type=TYPE, value=string(), purpose=string())
-PLAN = obj(title=string(), behavior=string("always_on", "while_pressed", "unsupported"),
+PLAN = obj(title=string(), behavior=string("always_on", "while_pressed", "blink", "unsupported"),
            explanation=string(), components=arr(PLAN_PART, 0, 8))
 TERMINAL = obj(name=string("positive", "negative", "anode", "cathode", "a", "b", "a1", "a2", "b1", "b2"), hole=string())
 DRAFT_COMPONENT = obj(id=ID, terminals=arr(TERMINAL, 2, 4), buildStep=STEP)
@@ -39,7 +40,7 @@ QUAT = obj(x={"type": "number"}, y={"type": "number"}, z={"type": "number"}, w={
 FRAME = obj(units=string("meters"), handedness=string("left"), originHole=string("A1"),
             xAxis=string("A1 toward J1"), yAxis=string("out of board"),
             zAxis=string("A1 toward A63"))
-PLACEMENT_COMPONENT = obj(id=ID, type=TYPE, value=string(), assetId=string(),
+PLACEMENT_COMPONENT = obj(id=ID, type=string("power_supply", "led", "resistor", "button"), value=string(), assetId=string(),
                           terminals=arr(obj(id=string(), holeId=string(), position=VEC), 2, 4),
                           position=VEC, rotation=QUAT, buildStep=STEP)
 PLACEMENT_WIRE = obj(id=ID, fromHole=string(), toHole=string(), color=string(),
@@ -52,6 +53,21 @@ PLACEMENT = obj(version={"type": "integer", "const": 1}, sessionId=REQUEST["prop
                 jumperWires=arr(PLACEMENT_WIRE, 0, 12),
                 validation=obj(valid={"type": "boolean", "const": True}, checks=arr(string()), warnings=arr(string())),
                 instructions=arr(obj(step=STEP, componentIds=arr(ID), text=string()), 1))
+
+
+PLACEMENT_V1 = deepcopy(PLACEMENT)
+# MCU bodies have no breadboard-local pose until Unity supplies a measured anchor.
+PLACEMENT_V2 = deepcopy(PLACEMENT_V1)
+PLACEMENT_V2['properties']['version'] = {'type': 'integer', 'const': 2}
+PLACEMENT_V2['properties']['components'] = arr(PLACEMENT_COMPONENT, 2, 2)
+PLACEMENT_V2['properties']['externalDevices'] = arr(obj(id=ID, type=string('arduino_uno'),
+    model=string('uno_r3'), assetId=string('arduino_uno_r3_v1'), placementMode=string('separate_anchor_required')), 1, 1)
+PLACEMENT_V2['properties']['externalConnections'] = arr(obj(id=ID, deviceId=ID, pin=string('D13','GND'),
+    holeId=string(), boardPosition=VEC, color=string(), buildStep=STEP), 2, 2)
+PLACEMENT_V2['properties']['firmware'] = obj(filename=string('circuit.ino'), board=string('Arduino Uno R3'),
+    language=string('arduino'), code=string(), uploadInstructions=string())
+PLACEMENT_V2['required'] += ['externalDevices', 'externalConnections', 'firmware']
+PLACEMENT = {'oneOf': [PLACEMENT_V1, PLACEMENT_V2]}
 
 
 def export():

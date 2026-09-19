@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from unittest.mock import patch
 from circuit import contracts
-from circuit.board import HOLES, RAW_BOARD
+from circuit.board import HOLES, RAW_BOARD, RAIL_X, rail_row
 from circuit.fixtures import fixture, request_for
 from circuit.provider import parse_response, responses_json, parse_chat_response, openrouter_json, provider_settings, CircuitProvider
 from circuit.service import CircuitService, make_placement
@@ -37,10 +37,40 @@ class LayoutTests(unittest.TestCase):
 
     def test_person2_geometry_exact_conversion(self):
         self.assertEqual(len(HOLES), 830)
-        for h in RAW_BOARD["holes"]:
+        terminal = [h for h in RAW_BOARD["holes"] if h["id"][0] != "L" and h["id"][0] != "R"]
+        self.assertEqual(len(terminal), 630)
+        for h in terminal:
             for axis in "xyz":
                 self.assertAlmostEqual(HOLES[h["id"]]["position"][axis], h[axis]/1000)
         self.assertAlmostEqual(HOLES["A63"]["position"]["z"], .15748)
+
+    def test_power_rails_follow_symmetric_modeled_layout(self):
+        rails = [h for h in HOLES.values() if h["id"][0] in "LR"]
+        self.assertEqual(len(rails), 200)
+        # Symmetric: 3 pitches outside A and J, pairs 1 pitch apart, same 48.26 mm rail-to-rail span as the source.
+        self.assertAlmostEqual(HOLES["L-A1"]["position"]["x"], -.00762)
+        self.assertAlmostEqual(HOLES["L+A1"]["position"]["x"], -.01016)
+        self.assertAlmostEqual(HOLES["R+A1"]["position"]["x"], .02794 + .00762)
+        self.assertAlmostEqual(HOLES["R-A1"]["position"]["x"], .02794 + .01016)
+        self.assertAlmostEqual(RAIL_X["R-"] - RAIL_X["L+"], 48.26)
+        self.assertAlmostEqual(HOLES["A1"]["position"]["x"] - HOLES["L-A1"]["position"]["x"],
+                               HOLES["R+A1"]["position"]["x"] - HOLES["J1"]["position"]["x"])
+        # Five 5-hole groups per segment with one empty pitch between groups, rows 3-31 and 33-61.
+        self.assertEqual([rail_row("A", i) for i in (1, 5, 6, 10, 25)], [3, 7, 9, 13, 31])
+        self.assertEqual([rail_row("B", i) for i in (1, 25)], [33, 61])
+        self.assertAlmostEqual(HOLES["L+A1"]["position"]["z"], HOLES["A3"]["position"]["z"])
+        self.assertAlmostEqual(HOLES["R-B25"]["position"]["z"], HOLES["J61"]["position"]["z"])
+        for h in rails:
+            self.assertEqual(h["position"]["y"], 0)
+        for prefix in ("L+", "L-", "R+", "R-"):
+            for segment, first_row in (("A", 3), ("B", 33)):
+                for index in range(1, 26):
+                    h = HOLES[prefix + segment + str(index)]
+                    row = first_row + ((index - 1) // 5) * 6 + (index - 1) % 5
+                    self.assertAlmostEqual(h["position"]["x"], RAIL_X[prefix] / 1000)
+                    self.assertAlmostEqual(h["position"]["z"], (row - 1) * .00254)
+                    self.assertEqual(h["net"], prefix + segment)
+        self.assertEqual(len({(h["position"]["x"], h["position"]["z"]) for h in HOLES.values()}), 830)
 
     def test_electrical_strips_and_split_rails(self):
         n = Nets()

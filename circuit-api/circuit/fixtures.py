@@ -2,17 +2,25 @@
 from .board import MODEL, default_inventory
 from .validation import CircuitError
 
-PROMPTS = {"button_led": "Turn on an LED when a button is pressed", "led": "Turn on a red LED"}
+PROMPTS = {"button_led": "Turn on an LED when a button is pressed", "led": "Turn on a red LED", "arduino_led": "Blink an external red LED every second using an Arduino Uno R3"}
 
 
 def request_for(name="button_led"):
-    return {"prompt": PROMPTS[name], "availableParts": default_inventory(),
+    inventory = default_inventory()
+    if name == "arduino_led":
+        inventory.append({"type": "arduino_uno", "value": "Uno R3", "quantity": 1})
+    return {"prompt": PROMPTS[name], "availableParts": inventory,
             "breadboardModel": MODEL, "sessionId": "demo-button-led"}
 
 
 def fixture(name):
     if name not in PROMPTS:
         raise CircuitError("UNKNOWN_FIXTURE", "Choose led or button_led.", 404)
+    if name == "arduino_led":
+        plan, draft = fixture("led")
+        plan.update(title="Arduino Uno · blinking LED", behavior="blink")
+        plan["components"][0].update(type="arduino_uno", value="Uno R3", purpose="Drive LED from digital pin 13")
+        return plan, draft
     button = name == "button_led"
     plan = {"title": "Button-controlled LED" if button else "Simple LED",
             "behavior": "while_pressed" if button else "always_on",

@@ -14,3 +14,30 @@ header{padding:18px 32px;flex-wrap:wrap;row-gap:10px}
 #steps li{font-size:13px;line-height:1.65;padding:12px 0}#status{font-size:13px;margin-bottom:18px}pre{max-width:100%;font-size:11px}.footnote{font-size:11px}
 @media(max-width:1050px){.workspace{grid-template-columns:290px minmax(0,1fr)}main{padding:24px}.panel{padding:18px}.intro h1{font-size:29px}.tag{display:none}.export button{flex:auto}}
 @media(max-width:780px){.workspace{grid-template-columns:1fr}.intro{display:block}.session{width:100%;margin-top:22px}.intro h1{font-size:30px}.controls{order:0}.result{order:1}header{padding:16px 20px}.panel{padding:18px}main{padding:24px 16px}.board-top{align-items:flex-start;flex-wrap:wrap}#preview{padding:6px}#connection{font-size:11px;max-width:180px}#steps li{font-size:12px}}
+/* Vertical, uniformly scaled hole map with a dedicated label gutter. */
+:root{background:#eef2ec;color:#243e34}main{max-width:1500px}.panel{box-shadow:0 8px 30px #203c2b06}.result{background:#fdfefb}.controls{position:sticky;top:20px}.intro h1{font-size:36px}.eyebrow{color:#5e8057}.primary{box-shadow:0 4px 10px #284b3b18}
+#preview{max-height:640px;overflow:auto;padding:14px;background:linear-gradient(135deg,#edf2e8,#f8faf5)}#preview svg{width:100%;max-width:610px;height:auto;max-height:none;margin:auto;min-width:400px}.board-top small{max-width:370px}.legend{justify-content:flex-start;border-bottom:1px solid #e4eadf}.wiring-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:22px}.wiring-heading h3,#firmware h3,#steps h3{font-size:15px}.wiring-heading .hint{margin:7px 0}.net-note{font-size:12px;line-height:1.7;color:#61735e;background:#eff4e9;border-left:3px solid #a3b990;padding:12px 14px;margin:12px 0 16px}
+#connections{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px}.connection-row{text-align:left;padding:12px;background:white;display:flex;flex-direction:column;gap:6px;min-width:0}.connection-row strong{font-size:12px}.connection-row span{font-size:11px;font-weight:400;line-height:1.6;color:#63745f;overflow-wrap:anywhere}.connection-row.selected,#steps button.selected{background:#e8f2d9;border-color:#83a168;box-shadow:inset 3px 0 #557745}
+#steps li{display:block;border:0;padding:4px 0}#steps li button{display:flex;gap:13px;width:100%;text-align:left;line-height:1.65;font-weight:400;border-color:transparent;background:#f5f7f0}#steps li b{padding-top:1px}#firmware{border:1px solid #d8e1ce;background:#f1f5eb;border-radius:10px;padding:18px;margin:20px 0}#firmware[hidden]{display:none}#upload-help{font-size:12px;line-height:1.7}#sketch{font-size:12px;background:#213c32;color:#def1ce;border-radius:8px}button,textarea,input,select{transition:border-color .15s,background .15s}.footnote{color:#687562}
+@media(max-width:1050px){#connections{grid-template-columns:1fr}.intro h1{font-size:30px}}@media(max-width:780px){.controls{position:static}#preview{max-height:560px}.intro h1{font-size:30px}}
+
+:root{background:#f3f5f3}
+header{background:#fff}.logo{color:#fff;border-radius:6px}
+.intro h1{font-size:32px;letter-spacing:-1px}.intro p:last-child{color:#586960;line-height:1.6}
+.panel{border-radius:10px;box-shadow:none}.result{background:#fff}.controls{position:static}
+.step,.pill{border-radius:5px;background:#edf2ee;color:#46634f}.pill{font-size:11px}
+label{font-size:13px}.hint,small{font-size:12px;color:#586960}
+input,select,textarea,button{border-radius:6px}button{min-height:42px}
+.primary{color:#fff;box-shadow:none}.offline{border-top-style:solid}.offline p{font-size:12px;color:#586960}
+#status{border-radius:0;border-left:3px solid #6d927b;background:#f2f6f3}
+#status.error{border-color:#b45b3c}
+/* Preserve readable spacing on narrow screens without stretching the board's axes. */
+#preview{background:#f6f8f6;border-radius:8px}
+#preview svg{min-width:540px;max-width:700px}
+#preview:focus-visible,summary:focus-visible{outline:2px solid #527c66;outline-offset:3px}
+.rail-pos{background:#c98a83}.rail-neg{background:#8aa9bd}
+.net-note{background:none;border:0;padding:0;color:#586960}
+.connection-row span{font-size:12px;color:#586960}
+.footnote{font-size:12px;color:#586960}
+footer{font-family:inherit;font-size:11px;letter-spacing:0;color:#586960;gap:20px}
+@media(max-width:780px){.intro h1{font-size:28px}input,textarea,select{font-size:16px}.board-top{flex-wrap:wrap}footer{flex-wrap:wrap}footer span{display:block}}

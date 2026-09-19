@@ -18,6 +18,7 @@
               "led",
               "resistor",
               "button",
+              "arduino_uno",
               "jumper_wire",
               "jumper"
             ]

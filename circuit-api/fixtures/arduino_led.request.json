@@ -1,0 +1,37 @@
+{
+  "prompt": "Blink an external red LED every second using an Arduino Uno R3",
+  "availableParts": [
+    {
+      "type": "led",
+      "value": "red",
+      "quantity": 1
+    },
+    {
+      "type": "resistor",
+      "value": "220ohm",
+      "quantity": 1
+    },
+    {
+      "type": "button",
+      "value": "momentary",
+      "quantity": 1
+    },
+    {
+      "type": "jumper_wire",
+      "value": "male-male",
+      "quantity": 10
+    },
+    {
+      "type": "power_supply",
+      "value": "5V",
+      "quantity": 1
+    },
+    {
+      "type": "arduino_uno",
+      "value": "Uno R3",
+      "quantity": 1
+    }
+  ],
+  "breadboardModel": "demo_breadboard_v1",
+  "sessionId": "demo-button-led"
+}
