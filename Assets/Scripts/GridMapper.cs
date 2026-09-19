@@ -2,93 +2,78 @@ using UnityEngine;
 
 public class GridMapper : MonoBehaviour
 {
-    [Header("Calibration")]
-    public Transform boardRoot;
-    public float pinPitch = 0.254f; // Scaled up 10x (was 0.0254f)
-    public Vector3 localOffset = Vector3.zero; 
-    public float verticalHeight = 0.05f; 
-    public float gizmoSphereRadius = 0.05f;
+    [Header("Calibration Roots")]
+    public Transform a1Anchor;
+    public float verticalHeight = 0.001f;
 
-    [Header("Runtime Visualizer")]
-    public bool spawnRuntimeSpheres = true;
-    public float runtimeSphereScale = 0.05f; // Scaled up for visibility
+    [Header("Calibrated World-Space Step Vectors (Per Single Step)")]
+    public Vector3 colStepWorld = new Vector3(-0.243f, 0f, 0f);
+    public Vector3 rowStepWorld = new Vector3(0f, 0f, -0.2395f);
 
-    private void Awake()
-    {
-        if (boardRoot == null)
-        {
-            GameObject boardObj = GameObject.Find("Breadboard");
-            if (boardObj != null) boardRoot = boardObj.transform;
-        }
-    }
+    [Header("Center Gap Offset (Rows F-J)")]
+    [Tooltip("Extra world offset applied starting at Row F due to the center breadboard gap.")]
+    public Vector3 rowGapOffset = new Vector3(0f, 0f, -0.585f);
 
-    private void Start()
-    {
-        Transform rootToUse = boardRoot != null ? boardRoot : transform;
-        
-        if (rootToUse.TryGetComponent(out Renderer boardRenderer))
-        {
-            Debug.Log($"[GridMapper] Board bounds center: {boardRenderer.bounds.center}, size: {boardRenderer.bounds.size}");
-        }
-
-        Vector3 testPos = GetWorldPositionFromPin(5, 'A', rootToUse);
-        Debug.Log($"Pin A5 world position: {testPos}");
-
-        if (spawnRuntimeSpheres)
-        {
-            SpawnMarker(GetWorldPositionFromPin(1, 'A', rootToUse), Color.green, "Marker_A1", rootToUse);
-            SpawnMarker(GetWorldPositionFromPin(5, 'E', rootToUse), Color.red, "Marker_E5", rootToUse);
-        }
-    }
-
-    public Vector3 GetWorldPositionFromPin(int row, char col, Transform root)
-    {
-        Transform activeRoot = root != null ? root : transform;
-        int colIndex = char.ToUpper(col) - 'A';
-        if (colIndex >= 5) colIndex--; // account for breadboard center gap
-        
-        float xOffset = colIndex * pinPitch;
-        float zOffset = row * pinPitch;
-        
-        Vector3 localPos = new Vector3(xOffset, verticalHeight, zOffset) + localOffset;
-        return activeRoot != null ? activeRoot.TransformPoint(localPos) : localPos;
-    }
+    [Header("Validation Gizmos")]
+    public bool showGizmos = true;
+    public float gizmoRadius = 0.04f;
 
     private void OnDrawGizmos()
     {
-        Transform rootToUse = boardRoot != null ? boardRoot : transform;
+        if (!showGizmos) return;
+        Transform refT = a1Anchor != null ? a1Anchor : transform;
+
         Gizmos.color = Color.green;
-        Gizmos.DrawSphere(GetWorldPositionFromPin(1, 'A', rootToUse), gizmoSphereRadius);
+        Gizmos.DrawWireCube(refT.position, Vector3.one * 0.02f);
+
+        if (a1Anchor == null) return;
+
+        Vector3 pos1 = GetPinWorldPosition("A1");
+        Vector3 pos2 = GetPinWorldPosition("H5");
+
+        // Visualize E5 to F5 gap bridge
+        Gizmos.color = Color.magenta;
+        Gizmos.DrawLine(pos1, pos2);
+
         Gizmos.color = Color.red;
-        Gizmos.DrawSphere(GetWorldPositionFromPin(5, 'E', rootToUse), gizmoSphereRadius);
+        Gizmos.DrawSphere(pos1, gizmoRadius);
+
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawSphere(pos2, gizmoRadius);
     }
 
-    private void SpawnMarker(Vector3 pos, Color color, string name, Transform parent)
+    public Vector3 GetPinWorldPosition(string pinName)
     {
-        Transform existing = parent.Find(name);
-        GameObject sphere = existing != null ? existing.gameObject : GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        
-        if (existing == null)
+        Transform refT = a1Anchor != null ? a1Anchor : transform;
+        if (string.IsNullOrEmpty(pinName) || pinName.Length < 2) return refT.position;
+
+        char rowChar = char.ToUpper(pinName[0]);
+        if (!int.TryParse(pinName.Substring(1), out int colNum)) return refT.position;
+
+        int rowIndex = rowChar - 'A'; // A=0 ... E=4, F=5 ... J=9
+        int colIndex = colNum - 1;    // 1->0 ... 30->29
+
+        Vector3 origin = a1Anchor != null ? a1Anchor.position : transform.position;
+        Vector3 pos = origin + (colStepWorld * colIndex) + (rowStepWorld * rowIndex);
+
+        // Apply center gap offset for Row F and beyond (index >= 5)
+        if (rowIndex >= 5)
         {
-            sphere.name = name;
-            sphere.transform.SetParent(parent, true);
+            pos += rowGapOffset;
         }
-        
-        sphere.transform.position = pos;
-        sphere.transform.localScale = Vector3.one * runtimeSphereScale;
-        
-        if (sphere.TryGetComponent(out Collider col)) Destroy(col);
-        
-        if (sphere.TryGetComponent(out Renderer rend))
-        {
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null) shader = Shader.Find("Standard");
-            if (shader == null) shader = Shader.Find("Unlit/Color");
-            
-            Material mat = new Material(shader);
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-            else if (mat.HasProperty("_Color")) mat.color = color;
-            rend.material = mat;
-        }
+
+        return pos + (Vector3.up * verticalHeight);
+    }
+
+    public GameObject PlaceComponentBetweenPins(GameObject prefab, string pinA, string pinB)
+    {
+        if (prefab == null) return null;
+        Vector3 posA = GetPinWorldPosition(pinA);
+        Vector3 posB = GetPinWorldPosition(pinB);
+        Vector3 midpoint = (posA + posB) * 0.5f;
+
+        GameObject obj = Instantiate(prefab, midpoint, Quaternion.identity);
+        if (posA != posB) obj.transform.LookAt(posB);
+        return obj;
     }
 }
