@@ -648,7 +648,7 @@ internal class RectangleDetector {
         val pointsX = FloatArray(sampleCount)
         val pointsY = FloatArray(sampleCount)
         var pointCount = 0
-        val searchRadius = maxOf(MIN_SOURCE_SEARCH_RADIUS_PX, step * 2 + 2)
+        val searchRadius = maxOf(MIN_SOURCE_SEARCH_RADIUS_PX, step * 4 + 2)
 
         for (sample in 0 until sampleCount) {
             // Corners are the part most affected by threshold rounding. The middle
@@ -677,7 +677,11 @@ internal class RectangleDetector {
         }
         if (pointCount < MIN_SOURCE_SIDE_SAMPLES) return null
 
-        val initial = fitLine(pointsX, pointsY, pointCount) ?: return null
+        // Carpet threads and the board's small connector tabs can contribute
+        // outliers. Least squares over every sample tilts the initial line toward
+        // those outliers and then rejects the actual straight plastic edge.
+        val initial = supportedSourceLine(pointsX, pointsY, pointCount, tangentX, tangentY, length)
+            ?: return null
         val residuals = FloatArray(pointCount)
         for (index in 0 until pointCount) {
             residuals[index] = perpendicularDistance(pointsX[index], pointsY[index], initial)
@@ -707,10 +711,44 @@ internal class RectangleDetector {
         return fitLine(inlierX, inlierY, inlierCount)
     }
 
+    private fun supportedSourceLine(
+        x: FloatArray, y: FloatArray, count: Int,
+        tangentX: Float, tangentY: Float, sideLength: Float,
+    ): Line? {
+        var best: Line? = null
+        var bestCount = 0
+        var bestResidual = Float.MAX_VALUE
+        // Deterministic consensus, bounded to 48 seed points; no random jitter.
+        val stride = maxOf(1, (count + 47) / 48)
+        for (a in 0 until count step stride) for (b in a + stride until count step stride) {
+            val dx = x[b] - x[a]
+            val dy = y[b] - y[a]
+            val distance = sqrt(dx * dx + dy * dy)
+            if (distance < sideLength * 0.3f) continue
+            if (abs((dx * tangentX + dy * tangentY) / distance) < MIN_SOURCE_DIRECTION_AGREEMENT) continue
+            val line = Line(x[a], y[a], dx / distance, dy / distance)
+            var inliers = 0
+            var residual = 0f
+            for (i in 0 until count) {
+                val miss = perpendicularDistance(x[i], y[i], line)
+                if (miss <= MAX_SOURCE_INLIER_DISTANCE_PX) {
+                    inliers++
+                    residual += miss
+                }
+            }
+            if (inliers > bestCount || (inliers == bestCount && residual < bestResidual)) {
+                best = line
+                bestCount = inliers
+                bestResidual = residual
+            }
+        }
+        return best
+    }
+
     /**
-     * The board is the bright object, so its outer edge is the last sustained
-     * bright-to-dark transition while walking from the interior toward the outside.
-     * Keeping the last transition avoids choosing a dark breadboard hole instead.
+     * Choose the strongest sustained bright-to-dark transition near a coarse edge.
+     * A broad interior/exterior support window distinguishes plastic from isolated
+     * holes or carpet threads. Choosing the last transition instead favors carpet.
      */
     private fun outerBrightToDarkTransition(
         luma: ByteArray,
@@ -726,7 +764,8 @@ internal class RectangleDetector {
         outwardY: Float,
         searchRadius: Int,
     ): Float? {
-        var lastTransition: Float? = null
+        var bestTransition: Float? = null
+        var strongestContrast = 0f
         for (offset in -searchRadius until searchRadius) {
             val inside = stripLuma(
                 luma, width, height, rowStride,
@@ -741,29 +780,34 @@ internal class RectangleDetector {
                 tangentX, tangentY,
             )
             if (!inside.isFinite() || !outside.isFinite()) continue
-            if (inside > threshold && outside <= threshold &&
-                inside - outside >= MIN_SOURCE_EDGE_CONTRAST
-            ) {
+            if (inside > threshold && outside <= threshold) {
                 // A board hole can create a one-pixel transition. Require a little
                 // bright support inside and dark support outside before accepting it.
-                val interiorSupport = stripLuma(
-                    luma, width, height, rowStride,
-                    baseX + outwardX * (offset - SOURCE_EDGE_SUPPORT_PX),
-                    baseY + outwardY * (offset - SOURCE_EDGE_SUPPORT_PX),
-                    tangentX, tangentY,
-                )
-                val exteriorSupport = stripLuma(
-                    luma, width, height, rowStride,
-                    baseX + outwardX * (offset + 1 + SOURCE_EDGE_SUPPORT_PX),
-                    baseY + outwardY * (offset + 1 + SOURCE_EDGE_SUPPORT_PX),
-                    tangentX, tangentY,
-                )
-                if (interiorSupport > threshold && exteriorSupport <= threshold) {
-                    lastTransition = offset + 0.5f
+                var interiorSupport = 0f
+                var exteriorSupport = 0f
+                for (support in 1..6) {
+                    val depth = support * SOURCE_EDGE_SUPPORT_PX
+                    interiorSupport += stripLuma(luma, width, height, rowStride,
+                        baseX + outwardX * (offset - depth), baseY + outwardY * (offset - depth),
+                        tangentX, tangentY)
+                    exteriorSupport += stripLuma(luma, width, height, rowStride,
+                        baseX + outwardX * (offset + 1 + depth), baseY + outwardY * (offset + 1 + depth),
+                        tangentX, tangentY)
+                }
+                interiorSupport /= 6f
+                exteriorSupport /= 6f
+                // Focus/resize blur spreads an edge across several pixels. Check
+                // its sustained contrast, not an unrealistically sharp one-pixel jump.
+                if (interiorSupport > threshold && exteriorSupport <= threshold &&
+                    interiorSupport - exteriorSupport >= MIN_SOURCE_EDGE_CONTRAST &&
+                    interiorSupport - exteriorSupport > strongestContrast
+                ) {
+                    bestTransition = offset + 0.5f
+                    strongestContrast = interiorSupport - exteriorSupport
                 }
             }
         }
-        return lastTransition
+        return bestTransition
     }
 
     /** Mean luma in a short strip parallel to a board side, or NaN off-frame. */

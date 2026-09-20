@@ -8,6 +8,7 @@ import android.opengl.Matrix
 import android.util.AttributeSet
 import android.view.Surface
 import com.google.ar.core.Camera
+import com.google.ar.core.Anchor
 import com.google.ar.core.Frame
 import com.google.ar.core.HitResult
 import com.google.ar.core.Plane
@@ -25,7 +26,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.hypot
-import kotlin.math.abs
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -49,11 +49,11 @@ class ArCameraPreview @JvmOverloads constructor(
         /** The board was located and continuous tracking has started. */
         fun onBoardTracked(reprojectionErrorPx: Float, boardWidthMeters: Float)
 
-        /** Whether a recent, verified camera-space board pose is available. */
+        /** Whether the calibrated anchor can currently be rendered with a tracked camera. */
         fun onBoardVisibility(visible: Boolean)
 
         /**
-         * The visually corrected board pose in the current camera frame.
+         * The fixed board anchor expressed in the current camera frame.
          * [physicalTranslation]/[physicalQuaternion] use image-camera axes.
          * [displayTranslation]/
          * [displayQuaternion] use the display-oriented camera frame that matches
@@ -118,7 +118,9 @@ class ArCameraPreview @JvmOverloads constructor(
     private var bestNorthAtNegativeY: Boolean? = null
     private var lastPublishedPoseTimestampNs = 0L
     private var boardVisible = false
-    private val visualTracker = VisualBoardTracker()
+    private val boardAnchor = AtomicReference<Anchor?>(null)
+    private val boardTracker = HybridBoardTracker()
+    private var detectionAnchorWorldPose: Pose? = null
     /** Camera-to-world pose belonging to the asynchronously detected image. */
     private var detectionPhysicalCameraWorldPose: Pose? = null
     private var detectionIntrinsicsFocal: FloatArray? = null
@@ -204,6 +206,8 @@ class ArCameraPreview @JvmOverloads constructor(
     fun release() {
         calibrationGeneration.incrementAndGet()
         detectionExecutor.shutdownNow()
+        // The owning activity has stopped the GL thread before calling release.
+        boardAnchor.getAndSet(null)?.detach()
     }
 
     fun setBoardOutline(calibration: BoardCalibration) {
@@ -228,13 +232,14 @@ class ArCameraPreview @JvmOverloads constructor(
             boardVisible = false
             northAtNegativeY = null
             detectionPhysicalCameraWorldPose = null
-            visualTracker.reset()
+            boardAnchor.getAndSet(null)?.detach()
+            boardTracker.reset()
         }
     }
 
     /**
-     * Selects a board for continuous image-based pose estimation. The calibrated
-     * camera intrinsics remain usable even while world tracking is paused.
+     * Uses image corners to calibrate a fixed world anchor. Subsequent camera
+     * motion changes the view, never the board's identity or placement side.
      */
     fun selectRectangle(index: Int) {
         val generation = calibrationGeneration.incrementAndGet()
@@ -255,7 +260,8 @@ class ArCameraPreview @JvmOverloads constructor(
             lastPublishedPoseTimestampNs = 0L
             northAtNegativeY = null
             detectionPhysicalCameraWorldPose = null
-            visualTracker.reset()
+            boardAnchor.getAndSet(null)?.detach()
+            boardTracker.reset()
             // Detection deliberately keeps running: a single pass gives a noisy aspect
             // ratio, so we solve on several and keep the best fit.
             rectangleDetectionActive = true
@@ -323,14 +329,13 @@ class ArCameraPreview @JvmOverloads constructor(
                 rectangleDetectionActive = false
                 postError("Calibration timed out. Move slowly over the surface, then tap Calibrate to try again.")
             }
-            // Images correct the board on every detection. A world map reporting
-            // TRACKING can still drift metres on this device, so it cannot own the
-            // board position; only bounded, visually verified motion is interpolated.
+            // Detection establishes the board once. After calibration the anchor
+            // owns its position; missed contours must not expire or move the model.
             if (!boardTrackingActive && solveAttemptsLeft == 0 && bestSolutionCameraPose != null) {
                 finishBoardSolve()
             }
             if (boardTrackingActive) {
-                val posePublished = publishVisualBoard(frame)
+                val posePublished = publishTrackedBoard(frame)
                 if (posePublished) {
                     lastPublishedPoseTimestampNs = frame.timestamp
                     if (!boardVisible) {
@@ -546,16 +551,14 @@ class ArCameraPreview @JvmOverloads constructor(
         }
         if (bestIndex < 0 || bestDistance > CANDIDATE_MATCH_RADIUS_PX) return
 
+        val solved = solveCandidate(bestIndex) ?: return
+        // Count usable measurements, not frames with uncertain edges. The overall
+        // calibration timeout still bounds retries. Never let a rejected fit seed
+        // corner correspondence for the following measurements.
+        if (solved.reprojectionErrorPx > MIN_REPROJECTION_TOLERANCE_PX) return
+        trackedCentroid = solved.centroid
+        commitInitialSolve(solved)
         solveAttemptsLeft--
-        val solved = solveCandidate(bestIndex)
-        if (solved != null) {
-            trackedCentroid = solved.centroid
-            if (solved.reprojectionErrorPx < bestSolutionError ||
-                solved.reprojectionErrorPx <= MIN_REPROJECTION_TOLERANCE_PX
-            ) {
-                commitInitialSolve(solved)
-            }
-        }
 
         if (solveAttemptsLeft <= 0) finishBoardSolve()
     }
@@ -593,11 +596,30 @@ class ArCameraPreview @JvmOverloads constructor(
         }
         val solved = bestSolutionCameraPose ?: return
         val north = bestNorthAtNegativeY ?: return
+        val sourceCamera = bestPhysicalCameraWorldPose
+        val frame = latestFrame
+        val session = arSession.get()
+        if (frame == null || frame.timestamp - bestSolutionTimestampNs !in 0L..500_000_000L) {
+            bestSolutionCameraPose = null
+            solveAttemptsLeft = SOLVE_ATTEMPTS
+            return
+        }
+        boardTracker.reset()
+        boardTracker.observeVisual(solved, bestSolutionTimestampNs)
+        // An AR anchor is optional: a valid visual solve must not be blocked by a
+        // paused or drifting map. Only independently verified anchors can render.
+        val anchor = if (sourceCamera != null && session != null &&
+            frame.camera.trackingState == TrackingState.TRACKING &&
+            AnchoredBoardTracker.healthyWorldPose(sourceCamera) &&
+            AnchoredBoardTracker.healthyWorldPose(frame.camera.pose)
+        ) try {
+            session.createAnchor(CameraPoseFrames.boardInWorld(solved, sourceCamera))
+        } catch (_: NotTrackingException) { null } else null
+        boardAnchor.getAndSet(anchor)?.detach()
         northAtNegativeY = north
-        visualTracker.observe(solved, bestPhysicalCameraWorldPose, bestSolutionTimestampNs)
         boardTrackingActive = true
-        // Keep measuring the physical board. ARCore TRACKING alone is not proof
-        // that its world position is correct on this phone.
+        // Keep visual measurements available if world tracking cannot be trusted.
+        // Corner correspondence and the calibrated north side remain fixed.
         rectangleDetectionActive = true
         calibrationActive = false
         lastPublishedPoseTimestampNs = latestFrame?.timestamp ?: 0L
@@ -607,31 +629,11 @@ class ArCameraPreview @JvmOverloads constructor(
         }
     }
 
-    private fun trackVisualBoard() {
-        val previous = lastOrderedCorners ?: return
-        val previousCenter = centroidOf(previous)
-        val previousArea = quadArea(previous)
-        val candidates = candidateImageCorners.indices.mapNotNull { index ->
-            val raw = candidateImageCorners[index]
-            val center = centroidOf(raw)
-            val distance = hypot(center.x - previousCenter.x, center.y - previousCenter.y)
-            val areaRatio = quadArea(raw) / previousArea.coerceAtLeast(1f)
-            if (distance > TRACK_MATCH_RADIUS_PX || areaRatio !in 0.45f..2.2f) return@mapNotNull null
-            val solved = solveCandidate(index) ?: return@mapNotNull null
-            if (solved.reprojectionErrorPx > MAX_TRACKED_REPROJECTION_PX) return@mapNotNull null
-            // Nearby full-board contours win over a bright carpet patch or one
-            // power rail. Pose fitting remains an independent quality gate.
-            Pair(solved, distance + 40f * abs(areaRatio - 1f) + 2f * solved.reprojectionErrorPx)
-        }
-        val selected = candidates.minByOrNull { it.second }?.first ?: return
-        if (visualTracker.observe(selected.result, selected.physicalCameraWorld, detectionTimestampNs) == null) return
-        lastOrderedCorners = selected.orderedCorners.copyOf()
-        trackedCentroid = selected.centroid
-    }
-
-    private fun publishVisualBoard(frame: Frame): Boolean {
+    private fun publishTrackedBoard(frame: Frame): Boolean {
         val camera = frame.camera
-        val physical = visualTracker.poseAt(
+        val anchor = boardAnchor.get()
+        val physical = boardTracker.poseAt(
+            anchor?.takeIf { it.trackingState == TrackingState.TRACKING }?.pose,
             camera.pose.takeIf { camera.trackingState == TrackingState.TRACKING },
             frame.timestamp,
         ) ?: return false
@@ -661,13 +663,30 @@ class ArCameraPreview @JvmOverloads constructor(
         return true
     }
 
-    private fun quadArea(corners: FloatArray): Float {
-        var twiceArea = 0f
-        for (i in 0 until 4) {
-            val j = (i + 1) % 4
-            twiceArea += corners[i * 2] * corners[j * 2 + 1] - corners[j * 2] * corners[i * 2 + 1]
-        }
-        return abs(twiceArea) / 2f
+    private fun verifyAnchorAlignment() {
+        val anchorWorld = detectionAnchorWorldPose ?: return
+        val cameraWorld = detectionPhysicalCameraWorldPose?.takeIf { detectionCameraWasTracking } ?: return
+        if (!AnchoredBoardTracker.healthyWorldPose(anchorWorld) ||
+            !AnchoredBoardTracker.healthyWorldPose(cameraWorld)) return
+        val expected = PlanarPoseSolver.projectBoardCorners(boardModel(),
+            detectionIntrinsicsFocal ?: return, detectionIntrinsicsPrincipal ?: return,
+            CameraPoseFrames.boardInCamera(anchorWorld, cameraWorld)) ?: return
+        val measured = AnchorAlignmentGate.matchingOutline(expected,
+            candidateImageCorners.indices.filter { candidateMeasuredCorners[it] }.map { candidateImageCorners[it] })
+        boardTracker.checkAnchor(expected, measured, detectionTimestampNs)
+    }
+
+    private fun trackVisualBoard() {
+        val previous = lastOrderedCorners ?: return
+        // Match against the last IMAGE measurement, not a possibly drifting anchor.
+        val measured = AnchorAlignmentGate.matchingOutline(previous,
+            candidateImageCorners.indices.filter { candidateMeasuredCorners[it] }.map { candidateImageCorners[it] })
+            ?: return
+        val index = candidateImageCorners.indexOfFirst { it === measured }
+        val solved = solveCandidate(index) ?: return
+        if (solved.reprojectionErrorPx > 12f || !boardTracker.observeVisual(solved.result, detectionTimestampNs)) return
+        lastOrderedCorners = solved.orderedCorners.copyOf()
+        trackedCentroid = solved.centroid
     }
 
     /** Choose a side once, from the SAME corner order used for the initial pose. */
@@ -759,6 +778,8 @@ class ArCameraPreview @JvmOverloads constructor(
         val camera = frame.camera
         detectionCameraWasTracking = camera.trackingState == TrackingState.TRACKING
         detectionPhysicalCameraWorldPose = camera.pose
+        // Capture the anchor in the SAME world-map revision as this image/camera.
+        detectionAnchorWorldPose = boardAnchor.get()?.takeIf { it.trackingState == TrackingState.TRACKING }?.pose
         detectionTimestampNs = frame.timestamp
         detectionIntrinsicsFocal = camera.imageIntrinsics.focalLength
         detectionIntrinsicsPrincipal = camera.imageIntrinsics.principalPoint
@@ -793,6 +814,7 @@ class ArCameraPreview @JvmOverloads constructor(
     private fun publishRectangles(candidates: List<RectangleDetector.Candidate>) {
         val frame = latestFrame
         if (frame == null || candidates.isEmpty()) {
+            if (boardTrackingActive) boardTracker.checkAnchor(floatArrayOf(), null, detectionTimestampNs)
             postCalibration { listener?.onCandidateRectangles(emptyList()) }
             return
         }
@@ -817,6 +839,7 @@ class ArCameraPreview @JvmOverloads constructor(
             attemptBoardSolve()
         } else if (boardTrackingActive) {
             trackVisualBoard()
+            verifyAnchorAlignment()
         }
 
         // Once a board is being tracked the candidate boxes are just noise on screen.
@@ -874,8 +897,6 @@ class ArCameraPreview @JvmOverloads constructor(
         const val TRACKING_HINT_STABLE_NS = 1_000_000_000L // Ignore anything shorter than a second.
         const val TRACKING_HINT_MIN_VISIBLE_NS = 1_500_000_000L
         const val VISUAL_TRACKING_INTERVAL_NS = 33_000_000L
-        const val TRACK_MATCH_RADIUS_PX = 200f
-        const val MAX_TRACKED_REPROJECTION_PX = 18f
         const val RECTANGLE_INTERVAL_NS = 300_000_000L // Roughly three detections per second.
 
         /** A worse fit than this is not a rectangle we can trust a pose from. */
@@ -888,7 +909,7 @@ class ArCameraPreview @JvmOverloads constructor(
 
         /** How far a candidate may sit from the tracked one and still be the same board. */
         const val CANDIDATE_MATCH_RADIUS_PX = 90f
-        /** Additional grace after the last recent visual pose expires. */
+        /** Ignore very brief AR tracking pauses before hiding the overlay. */
         const val TRACKING_LOST_GRACE_NS = 300_000_000L
         const val SURFACE_TARGET_INTERVAL_NS = 250_000_000L
         const val BOARD_OUTLINE_INTERVAL_NS = 66_000_000L

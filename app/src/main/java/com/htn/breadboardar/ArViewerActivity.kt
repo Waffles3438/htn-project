@@ -192,16 +192,16 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener {
         overlay.clearSelectedRectangle()
         overlay.endCalibration()
         boardFitPx = reprojectionErrorPx.toInt()
-        showStatus("Board tracked. Move slowly around it to view the model in 3D; keep the board visible.")
+        showStatus("Board calibrated. Move slowly around it; keep the board visible for visual tracking.")
     }
 
     override fun onBoardVisibility(visible: Boolean) {
         if (!visible) nativeBreadboardRenderer.hide()
         showStatus(
             if (visible) {
-                "Board tracked. Move slowly around it to view the model in 3D; keep the board visible."
+                "Board calibrated. Move slowly around it; keep the board visible for visual tracking."
             } else {
-                "Looking for the board again. Bring its full outline into view; tracking resumes automatically."
+                "Looking for the board. Bring its full outline into view; visual tracking will resume automatically."
             },
         )
     }

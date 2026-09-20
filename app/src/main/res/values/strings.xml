@@ -2,6 +2,9 @@
     <string name="app_name">Circuit</string>
     <string name="camera_permission_required">Camera permission is required for breadboard calibration.</string>
     <string name="ar_unavailable">This phone does not support ARCore.</string>
+    <string name="ar_back_to_circuit">Back to circuit</string>
+    <string name="ar_calibrate">Calibrate</string>
+    <string name="ar_reset">Reset</string>
     <string name="ui_circuit">circuit /</string>
     <string name="ui_settings">Settings</string>
     <string name="ui_01_design_02_review_03_ar">01  DESIGN     /     02  REVIEW     /     03  AR</string>

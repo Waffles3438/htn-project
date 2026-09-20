@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/viewer_overlay"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/calibrate_button"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:minHeight="56dp"
+            android:enabled="false"
+            android:text="@string/ar_calibrate" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/reset_button"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:minHeight="56dp"
+            android:enabled="false"
+            android:text="@string/ar_reset" />
+    </LinearLayout>
+
+    <!-- Keep the full navigation label readable without squeezing it into a third. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/back_to_circuit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:minHeight="56dp"
+        android:gravity="center"
+        android:text="@string/ar_back_to_circuit" />
+</LinearLayout>
