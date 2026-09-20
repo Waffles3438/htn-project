@@ -18,7 +18,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Optional HTTPS service origin. App Settings can override it; no provider secrets.
-        val apiUrl = providers.gradleProperty("circuitApiUrl").orElse("").get()
+        val apiUrl = providers.gradleProperty("circuitApiUrl").orElse("https://circuit-api.vercel.app").get()
         require(apiUrl.isEmpty() || apiUrl.matches(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?"))) { "circuitApiUrl must be an HTTPS origin" }
         buildConfigField("String", "CIRCUIT_API_URL", "\"$apiUrl\"")
         buildConfigField("boolean", "UNITY_AVAILABLE", unityAvailable.toString())
@@ -39,7 +39,8 @@ android {
 
     buildTypes {
         debug {
-            val localApi = providers.gradleProperty("circuitApiUrl").orElse("http://127.0.0.1:8000").get()
+            val localApi = if (providers.gradleProperty("circuitLocalApi").orNull == "true") "http://127.0.0.1:8000"
+                else providers.gradleProperty("circuitApiUrl").orElse("https://circuit-api.vercel.app").get()
             buildConfigField("String", "CIRCUIT_API_URL", "\"$localApi\"")
         }
         release {

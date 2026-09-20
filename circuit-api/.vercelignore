@@ -1,7 +1,7 @@
 # Keep the serverless bundle small: only api/, circuit/, requirements.txt and
 # reference/person2/ (board geometry) are needed at runtime.
 .env
-.env.example
+.env.*
 .backboard
 .github
 .venv

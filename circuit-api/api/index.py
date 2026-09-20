@@ -1,6 +1,6 @@
 """Vercel Python entry point (https://vercel.com/docs/functions/runtimes/python/api-directory).
 
-Exposes the shared router as a WSGI app; vercel.json rewrites /api/* here.
+Exposes the shared router as a WSGI app; Vercel Python preserves the original request path.
 """
 import os
 import sys

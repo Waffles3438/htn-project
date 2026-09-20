@@ -44,15 +44,15 @@ adb devices
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-For a **USB-connected phone**, enable USB debugging, accept its connection prompt, then run:
+The app now defaults to the hosted service at **https://circuit-api.vercel.app**. Use Wi-Fi or mobile data; neither USB nor the Mac server is needed. Existing installations can set this origin in **Settings**. New builds also migrate the old localhost USB setting once, while preserving custom service origins.
+
+For optional local development over USB:
 
 ```sh
 ./scripts/run-android-usb.sh
 ```
 
-This starts the local API if necessary, checks that the provider is configured, forwards the phone’s port 8000 to the Mac with `adb reverse`, builds, and installs. Debug APKs default to `http://127.0.0.1:8000`. If you previously saved another address, set this URL in the app’s **Settings**. Keep the cable connected and the API running. Try **make red led with button**, review the schematic, choose **Preview complete circuit in 3D**, then **Show beside my board**. No GLB URL needs to be entered.
-
-For an APK used without the Mac, set a deployed API origin in **Settings**, or build with `-PcircuitApiUrl=https://your-service.vercel.app`. Release builds require HTTPS. The API must have its provider key configured; keys stay off the phone. Offline examples remain explicitly labeled.
+That script deliberately builds with `-PcircuitLocalApi=true`, starts/checks the Mac API, forwards port 8000 with `adb reverse`, and installs the debug APK. Only this local mode requires the cable and Mac server. Build normally with `./scripts/build-android.sh` to return to the hosted default. A custom hosted origin can be supplied with `-PcircuitApiUrl=https://your-service.vercel.app`.
 
 For another machine, install JDK 17, Android SDK 35 + build tools 36, NDK r27c (`27.2.12479018`), CMake 3.22.1, and the matching Unity editor with Android Build Support. Set `JAVA_HOME`, `ANDROID_HOME`, and `UNITY_EDITOR`, plus `sdk.dir` in local.properties if your IDE needs it. AGP 9.0/Gradle 9.1 matches the Unity version's generated build; Kotlin is provided by AGP.
 
@@ -86,6 +86,6 @@ source scripts/android-env.sh
 ./gradlew :app:connectedDebugAndroidTest  # running emulator or USB device
 ```
 
-Current verification: Android build and lint, 47 native unit tests (including calibration/tracking tests and circuit-to-GLB regression tests), and Khronos glTF validation of all three generated scenes with zero errors or warnings. Emulator flow tests cover request compatibility, review persistence, failure recovery, and rendered 3D preview. The opt-in live-provider test passed with **make red led with button**, verified an OpenRouter response rather than a fixture, and rendered the generated circuit through the app’s native 3D screen.
+Current verification: Android build and lint, 73 native unit tests (including calibration/tracking tests and circuit-to-GLB regression tests), and Khronos glTF validation of all three generated scenes with zero errors or warnings. Emulator flow tests cover request compatibility, review persistence, failure recovery, and rendered 3D preview. The opt-in live-provider test passed against **https://circuit-api.vercel.app** with **make red led with button**, verified an OpenRouter response rather than a fixture, and rendered the generated circuit through the app’s native 3D screen. Local ADB port forwarding was removed for this check.
 
-Physical tracking and hole alignment still require acceptance on an ARCore phone; `physicalVerified=false` remains intentional. No new hosted deployment was created. The live local API is reached over USB for development.
+Physical tracking and hole alignment still require acceptance on an ARCore phone; `physicalVerified=false` remains intentional. The public API is deployed at https://circuit-api.vercel.app. Hosting smoke tests verify health and validated demo generation without local files or a browser login. Deployments currently use the Vercel CLI; GitHub automatic deployment is not connected.

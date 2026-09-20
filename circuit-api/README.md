@@ -1,23 +1,27 @@
 # Circuit API
 
-Small hosted generation and electrical-validation service for the Android app. The phone renders a native breadboard preview and hands the same semantic JSON to its embedded Unity renderer. No browser, laptop renderer, polling, database, or Python runtime on the phone is required.
+Small hosted generation and electrical-validation service for the Android app. The phone renders a native breadboard preview and hands the same semantic JSON to its native AR renderer using Unity-authored meshes. No browser, laptop renderer, polling, database, or Python runtime on the phone is required.
+
+## Hosted service
+
+Production origin: **https://circuit-api.vercel.app**. Save this in Android Settings to use the app without USB or a running Mac. Provider keys are configured in Vercel’s Production environment, not packaged in the APK or uploaded from `.env`.
 
 ## Host on Vercel
 
-Set the Vercel project's root directory to **`circuit-api`**, use **Other** as the framework preset, and leave the build/output commands unset. The Python entry is `api/index.py`; `vercel.json` routes `/api/*` to the WSGI app with a 180-second budget for two provider requests. `.vercelignore` excludes `web/`, `static/`, fixtures, handoffs and local data. No npm build is required.
+Set the Vercel project's root directory to **`circuit-api`**, use the **Python** framework preset, and leave the build/output commands unset. The Python entry is `api/index.py`; The Python runtime routes requests to the WSGI app; `vercel.json` sets a 180-second budget for two provider requests. Do not rewrite `/api/*` to `/api/index.py`: current Vercel Python routing would pass that rewritten path to the app and return 404. `.vercelignore` excludes `web/`, `static/`, fixtures, handoffs and local data. No npm build is required.
 
 Configure either `OPENROUTER_API_KEY` or `OPENAI_API_KEY` in the host's environment, optionally `CIRCUIT_PROVIDER`, `OPENROUTER_MODEL` or `OPENAI_MODEL`. Never put the provider key into an Android Gradle property. `ALLOWED_ORIGIN` is only needed for a separate browser client. The native Android client sends no Origin header.
 
 ```sh
 cd circuit-api
-vercel deploy
+npx vercel deploy --prod
 # After deployment:
 curl -fsS https://YOUR-DEPLOYMENT/api/health
 curl -fsS https://YOUR-DEPLOYMENT/api/circuits/demo/led \
   -H 'Content-Type: application/json' -d '{}'
 ```
 
-Save that HTTPS origin in the Android app's Settings, or build with `-PcircuitApiUrl=https://YOUR-DEPLOYMENT`. This repository is configured for hosting; no deployment URL has been provisioned as part of this change. For an internet-facing paid generation endpoint, configure the host's access/rate controls to suit the demo or intended users; CORS and the process-local BUSY lock are not authentication or a global quota.
+Save that HTTPS origin in the Android app's Settings, or build with `-PcircuitApiUrl=https://YOUR-DEPLOYMENT`. The `circuit-api` project is deployed in the connected Vercel account. Updates currently require `npx vercel deploy --prod` from this directory; automatic GitHub deployment is not connected. For an internet-facing paid generation endpoint, configure the host's access/rate controls to suit the demo or intended users; CORS and the process-local BUSY lock are not authentication or a global quota.
 
 On Vercel (`VERCEL` set), circuit responses are **stateless**: there are no disk writes and session polling returns 404. Android persists the last valid response itself. This avoids depending on temporary files being available across serverless instances.
 

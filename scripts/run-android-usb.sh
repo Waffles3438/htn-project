@@ -26,7 +26,7 @@ fi
 while IFS= read -r device; do
   adb -s "$device" reverse tcp:8000 tcp:8000
 done <<< "$CIRCUIT_DEVICES"
-./scripts/build-android.sh
+./scripts/build-android.sh -PcircuitLocalApi=true
 while IFS= read -r device; do
   adb -s "$device" install -r app/build/outputs/apk/debug/app-debug.apk
 done <<< "$CIRCUIT_DEVICES"

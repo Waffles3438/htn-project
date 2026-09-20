@@ -61,6 +61,13 @@ class MainActivity : AppCompatActivity() {
         }
         board = BoardGeometry(assets.open("board-map.json").bufferedReader().use { it.readText() })
         schematic = findViewById<BreadboardView>(R.id.breadboard_view).also { it.board = board }
+        // One-time upgrade from the former USB-only default. Preserve custom service origins.
+        if (ApiConfig.baseUrl.startsWith("https://") && !prefs.getBoolean("hosted_api_migrated", false)) {
+            val previous = prefs.getString("api_url", null)?.trimEnd('/')
+            val edit = prefs.edit().putBoolean("hosted_api_migrated", true)
+            if (previous in setOf("http://127.0.0.1:8000", "http://localhost:8000", "http://10.0.2.2:8000")) edit.remove("api_url")
+            edit.apply()
+        }
         api = CircuitApiClient(assets.open("default-kit.json").bufferedReader().use { it.readText() }) { prefs.getString("api_url", ApiConfig.baseUrl).orEmpty() }
         findViewById<Button>(R.id.settings_button).setOnClickListener { settings() }
         findViewById<Button>(R.id.generate_button).setOnClickListener { generate() }
