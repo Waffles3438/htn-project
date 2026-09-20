@@ -8,6 +8,8 @@ data class BoardPoint(val x: Float, val y: Float, val z: Float)
 class BoardGeometry(json: String) {
     val version: String
     val holes: Map<String, BoardPoint>
+    /** Leftmost rail x, so overlays can shift the letter axis to start at zero. */
+    val minX: Float
     init {
         val root = JSONObject(json)
         version = root.getString("holeMapVersion")
@@ -17,6 +19,7 @@ class BoardGeometry(json: String) {
             val p = hole.getJSONObject("position")
             hole.getString("id") to BoardPoint(p.getDouble("x").toFloat(), p.getDouble("y").toFloat(), p.getDouble("z").toFloat())
         }
+        minX = holes.values.minOf { it.x }
     }
 
     fun hole(address: String): BoardPoint? {

@@ -24,10 +24,16 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException
 import com.htn.breadboardar.ar.ArCameraPreview
 import com.htn.breadboardar.ar.BoardCalibration
 import com.htn.breadboardar.ar.CameraState
+import com.htn.breadboardar.ar.CircuitOverlayFeature
 import com.htn.breadboardar.ar.ThreePointCalibrator
+import com.htn.breadboardar.circuit.BoardGeometry
+import com.htn.breadboardar.circuit.CircuitDefinition
+import com.htn.breadboardar.circuit.CircuitOverlayGeometry
 import com.htn.breadboardar.network.GlbModelDownloader
+import com.htn.breadboardar.render.CircuitOverlayBuilder
 import com.htn.breadboardar.render.NativeBreadboardRenderer
 import com.htn.breadboardar.ui.CalibrationOverlayView
+import java.io.File
 
 class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModelDownloader.Listener {
     private lateinit var preview: ArCameraPreview
@@ -97,6 +103,7 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
         calibrateButton.setOnClickListener(::beginCalibration)
         resetButton.setOnClickListener { resetCalibration("Calibration reset. Tap Calibrate to begin again.") }
         showStatus("Tap Calibrate to find your breadboard. Optionally load a .glb model from your backend.")
+        loadCircuitOverlay()
     }
 
     override fun onResume() {
@@ -121,6 +128,10 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
     }
 
     override fun onCameraState(@Suppress("UNUSED_PARAMETER") state: CameraState) = Unit
+
+    override fun onCircuitOverlay(features: List<CircuitOverlayFeature>) {
+        overlay.showCircuitOverlay(features)
+    }
 
     override fun onCalibrationHit(pose: Pose) {
         try {
@@ -330,6 +341,35 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
     private fun showStatus(message: String) {
         baseStatus = message
         renderStatus()
+    }
+
+    /**
+     * Renders the selected circuit in two layers: the 3-D copy beside the board gains
+     * component meshes, and the scanned photo of the physical board itself is marked
+     * with the same circuit at its hole positions. [MainActivity] saves the circuit as
+     * private app data before launching this viewer; without it the copy stays a bare
+     * breadboard. A broken circuit degrades to the bare board, never a crash, because
+     * the physical-board tracking flow must keep working.
+     */
+    private fun loadCircuitOverlay() {
+        val file = File(filesDir, "ar-circuit.json")
+        if (!file.isFile) return
+        runCatching {
+            val circuit = CircuitDefinition.parse(file.readText())
+            val board = BoardGeometry(assets.open("board-map.json").bufferedReader().use { it.readText() })
+            board.validate(circuit)
+            nativeBreadboardRenderer.setCircuitOverlay(CircuitOverlayBuilder(board, circuit).buildGlb())
+            val marks = CircuitOverlayGeometry.of(circuit, board)
+            preview.setCircuitOverlay(marks.points, marks.specs)
+            circuit
+        }.onSuccess { circuit ->
+            showStatus(
+                "${circuit.title} ready: ${circuit.components.size + circuit.externalDevices.size} parts, " +
+                    "${circuit.jumperWires.size} wires beside your board and marked on it. Tap Calibrate to place it.",
+            )
+        }.onFailure { error ->
+            showStatus("Could not render the circuit components: ${error.message}. Showing the bare breadboard.")
+        }
     }
 
     /** The AR tracking hint sits above whatever step the user is on, never replacing it. */

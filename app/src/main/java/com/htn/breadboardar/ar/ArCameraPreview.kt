@@ -21,6 +21,7 @@ import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.DeadlineExceededException
 import com.google.ar.core.exceptions.NotTrackingException
 import com.google.ar.core.exceptions.NotYetAvailableException
+import com.htn.breadboardar.circuit.CircuitOverlayGeometry
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -75,6 +76,12 @@ class ArCameraPreview @JvmOverloads constructor(
         /** Projection matching ARCore's display-oriented camera background. */
         fun onCameraProjection(projection: FloatArray)
 
+        /**
+         * The learner's circuit components projected onto the scanned board photo.
+         * Empty when no circuit was handed over or tracking is lost.
+         */
+        fun onCircuitOverlay(features: List<CircuitOverlayFeature>)
+
         /** Non-null while ARCore cannot track, explaining what the user should change. */
         fun onTrackingHint(message: String?)
         fun onArError(message: String)
@@ -93,6 +100,9 @@ class ArCameraPreview @JvmOverloads constructor(
     private var lastSurfaceTargetsTimestampNs = 0L
     private var lastBoardOutlineTimestampNs = 0L
     private var boardCalibration: BoardCalibration? = null
+    /** Board-plane overlay points and their grouping, set once per viewer session. */
+    private var circuitOverlayPoints: FloatArray? = null
+    private var circuitOverlaySpecs: List<CircuitOverlayGeometry.Spec> = emptyList()
     private var calibrationActive = false
     private var lastTrackingHint: String? = NOT_YET_REPORTED
     private var nonTrackingSinceNs = 0L
@@ -208,6 +218,18 @@ class ArCameraPreview @JvmOverloads constructor(
 
     fun setBoardOutline(calibration: BoardCalibration) {
         queueEvent { boardCalibration = calibration }
+    }
+
+    /**
+     * Supplies the circuit drawing plan to project onto the scanned board once the
+     * visual pose solve is tracking. Points are (length, width) pairs in metres;
+     * specs group them into drawable features. Call once from the UI thread.
+     */
+    fun setCircuitOverlay(points: FloatArray, specs: List<CircuitOverlayGeometry.Spec>) {
+        queueEvent {
+            circuitOverlayPoints = points
+            circuitOverlaySpecs = specs
+        }
     }
 
     fun clearBoardOutline() {
@@ -341,6 +363,7 @@ class ArCameraPreview @JvmOverloads constructor(
                     boardVisible = false
                     postCalibration {
                         listener?.onBoardOutline(emptyList())
+                        listener?.onCircuitOverlay(emptyList())
                         listener?.onBoardVisibility(false)
                     }
                 }
@@ -642,17 +665,28 @@ class ArCameraPreview @JvmOverloads constructor(
             physical, CameraPoseFrames.physicalToDisplayCamera(camera.pose, camera.displayOrientedPose),
         )
         val intrinsics = camera.imageIntrinsics
+        // The overlay points ride the same projection as the outline corners, so
+        // components and the yellow border can never disagree about where the board is.
+        val corners = boardModel()
+        val overlayPoints = circuitOverlayPoints
+        val combined = if (overlayPoints == null || overlayPoints.isEmpty()) corners
+        else FloatArray(corners.size + overlayPoints.size).also {
+            corners.copyInto(it)
+            overlayPoints.copyInto(it, corners.size)
+        }
         val imagePoints = PlanarPoseSolver.projectBoardCorners(
-            boardModel(), intrinsics.focalLength, intrinsics.principalPoint, physical,
+            combined, intrinsics.focalLength, intrinsics.principalPoint, physical,
         ) ?: return false
-        val viewPoints = FloatArray(8)
+        val viewPoints = FloatArray(combined.size)
         frame.transformCoordinates2d(Coordinates2d.IMAGE_PIXELS, imagePoints, Coordinates2d.VIEW, viewPoints)
         val outline = List(4) { PointF(viewPoints[it * 2], viewPoints[it * 2 + 1]) }
+        val features = circuitOverlayFeatures(viewPoints, corners.size / 2)
         val projection = FloatArray(16)
         camera.getProjectionMatrix(projection, 0, FILAMENT_NEAR_M, FILAMENT_FAR_M)
         postCalibration {
             listener?.onCameraProjection(projection)
             listener?.onBoardOutline(outline)
+            if (features.isNotEmpty()) listener?.onCircuitOverlay(features)
             listener?.onBoardPoseInCamera(
                 physical.translation, physical.quaternion,
                 displayPose.translation, displayPose.quaternion, north,
@@ -703,6 +737,24 @@ class ArCameraPreview @JvmOverloads constructor(
     }
 
     private fun boardModel(): FloatArray = boardGeometry.corners()
+
+    /** Slices the projected overlay points into the features the UI draws. */
+    private fun circuitOverlayFeatures(viewPoints: FloatArray, cornerCount: Int): List<CircuitOverlayFeature> {
+        val specs = circuitOverlaySpecs
+        if (specs.isEmpty()) return emptyList()
+        return specs.map { spec ->
+            CircuitOverlayFeature(
+                points = List(spec.pointCount) { index ->
+                    val slot = cornerCount + spec.pointStart + index
+                    PointF(viewPoints[slot * 2], viewPoints[slot * 2 + 1])
+                },
+                closed = spec.closed,
+                color = spec.color,
+                strokeWidthPx = spec.strokeWidthPx,
+                label = spec.label,
+            )
+        }
+    }
 
     private fun centroidOf(corners: FloatArray): PointF {
         var x = 0f

@@ -10,6 +10,7 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import com.htn.breadboardar.ar.CircuitOverlayFeature
 
 class CalibrationOverlayView @JvmOverloads constructor(
     context: Context,
@@ -32,6 +33,7 @@ class CalibrationOverlayView @JvmOverloads constructor(
     private val boardOutlineSmoother = ScreenQuadSmoother()
     private var candidateRectangles: List<List<PointF>> = emptyList()
     private var selectedRectangle: List<PointF>? = null
+    private var circuitFeatures: List<CircuitOverlayFeature> = emptyList()
 
     private val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(128, 203, 196)
@@ -74,6 +76,9 @@ class CalibrationOverlayView @JvmOverloads constructor(
         strokeWidth = 10f
         setShadowLayer(6f, 0f, 1f, Color.BLACK)
     }
+    private val circuitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        setShadowLayer(3f, 0f, 1f, Color.BLACK)
+    }
 
     fun beginCalibration() {
         isCalibrating = true
@@ -82,6 +87,7 @@ class CalibrationOverlayView @JvmOverloads constructor(
         smoothedBoardOutline = null
         candidateRectangles = emptyList()
         selectedRectangle = null
+        circuitFeatures = emptyList()
         invalidate()
     }
 
@@ -99,6 +105,7 @@ class CalibrationOverlayView @JvmOverloads constructor(
         smoothedBoardOutline = null
         candidateRectangles = emptyList()
         selectedRectangle = null
+        circuitFeatures = emptyList()
         invalidate()
     }
 
@@ -147,6 +154,15 @@ class CalibrationOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    /**
+     * Shows the learner's components on the scanned board. Features arrive already
+     * projected into view pixels by the camera preview, so they track the board.
+     */
+    fun showCircuitOverlay(features: List<CircuitOverlayFeature>) {
+        circuitFeatures = features
+        invalidate()
+    }
+
     fun lockSelectedRectangle(corners: List<PointF>) {
         selectedRectangle = corners
         candidateRectangles = emptyList()
@@ -161,6 +177,10 @@ class CalibrationOverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
+        // Components first: the yellow outline, candidates and tap markers always
+        // stay readable on top of the projected circuit.
+        circuitFeatures.forEach { feature -> drawCircuitFeature(canvas, feature) }
 
         if (isCalibrating && surfaceTargets.isNotEmpty()) {
             surfaceTargets.forEach { target ->
@@ -196,6 +216,45 @@ class CalibrationOverlayView @JvmOverloads constructor(
         tapPoints.forEachIndexed { index, point ->
             canvas.drawCircle(point.x, point.y, 24f, pointPaint)
             canvas.drawText((index + 1).toString(), point.x + 32f, point.y + 12f, labelPaint)
+        }
+    }
+
+    /** Renders one projected feature: filled body, stroked wire, or labelled point. */
+    private fun drawCircuitFeature(canvas: Canvas, feature: CircuitOverlayFeature) {
+        if (feature.points.isEmpty()) return
+        val path = Path().apply {
+            moveTo(feature.points[0].x, feature.points[0].y)
+            if (!feature.closed && feature.points.size == 3) {
+                // Wires arrive as start, mid bulge, end; the schematic uses the same arc.
+                quadTo(feature.points[1].x, feature.points[1].y, feature.points[2].x, feature.points[2].y)
+            } else {
+                feature.points.drop(1).forEach { lineTo(it.x, it.y) }
+                if (feature.closed) close()
+            }
+        }
+        if (feature.closed) {
+            circuitPaint.style = Paint.Style.FILL
+            circuitPaint.strokeWidth = 0f
+            circuitPaint.color = feature.color
+            circuitPaint.alpha = 210
+            canvas.drawPath(path, circuitPaint)
+        } else if (feature.strokeWidthPx > 0f) {
+            circuitPaint.style = Paint.Style.STROKE
+            circuitPaint.strokeWidth = feature.strokeWidthPx
+            circuitPaint.color = feature.color
+            circuitPaint.alpha = 235
+            canvas.drawPath(path, circuitPaint)
+        }
+        val label = feature.label
+        if (label != null) {
+            circuitPaint.style = Paint.Style.FILL
+            circuitPaint.strokeWidth = 0f
+            circuitPaint.color = Color.WHITE
+            circuitPaint.alpha = 255
+            circuitPaint.textSize = if (label.length > 3) 34f else 26f
+            circuitPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(label, feature.points[0].x, feature.points[0].y + circuitPaint.textSize / 3f, circuitPaint)
+            circuitPaint.textAlign = Paint.Align.LEFT
         }
     }
 

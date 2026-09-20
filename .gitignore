@@ -8,8 +8,9 @@
 .cxx/
 .externalNativeBuild/
 
-# Android Studio and IntelliJ
+# Android Studio, IntelliJ, and VS Code
 .idea/
+.vscode/
 *.iml
 captures/
 
@@ -19,8 +20,8 @@ keystore.properties
 *.jks
 *.keystore
 
-# Mock server dependencies, logs, and local environment values
-mock-server/node_modules/
+# Node dependencies, mock server local environment values, and npm logs
+node_modules/
 mock-server/.env
 npm-debug.log*
 yarn-debug.log*

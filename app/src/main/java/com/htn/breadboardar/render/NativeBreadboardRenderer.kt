@@ -45,6 +45,10 @@ internal class NativeBreadboardRenderer(
 
     private lateinit var modelViewer: ModelViewer
     private var sourceBuffer: ByteBuffer? = null
+    private var bundledBuffer: ByteBuffer? = null
+    private var breadboardCenter: FloatArray? = null
+    private var breadboardHalfExtent: FloatArray? = null
+    private var sourceIsBreadboard = false
     private var boardPose: BoardPose? = null
     private var cameraProjection: FloatArray? = null
     private var assetLocalTransform: FloatArray? = null
@@ -95,8 +99,10 @@ internal class NativeBreadboardRenderer(
 
         configureTransparentView()
         configureCameraRelativeLighting()
-        sourceBuffer = readDirectBuffer(assets, MODEL_ASSET_PATH)
-        loadModelOrRestorePrevious(sourceBuffer!!)
+        val bundled = readDirectBuffer(assets, MODEL_ASSET_PATH)
+        bundledBuffer = bundled
+        loadModelOrRestorePrevious(bundled, isBreadboard = true)
+        captureBreadboardBounds()
         scheduleFrame()
     }
 
@@ -110,7 +116,22 @@ internal class NativeBreadboardRenderer(
         if (released) return
         require(downloadedBuffer.remaining() > 0) { "The downloaded GLB is empty." }
         val replacement = copyToDirectBuffer(downloadedBuffer)
-        loadModelOrRestorePrevious(replacement)
+        loadModelOrRestorePrevious(replacement, isBreadboard = false)
+        updateOverlayVisibility()
+    }
+
+    /**
+     * Loads the bundled breadboard plus the schematic circuit overlay generated from the
+     * learner's circuit JSON. The overlay is authored in the breadboard's own coordinate
+     * frame, so the merged asset renders the copy's components with one transform chain.
+     */
+    fun setCircuitOverlay(overlayGlb: ByteBuffer) {
+        checkMainThread()
+        if (released) return
+        require(overlayGlb.remaining() > 0) { "The circuit overlay is empty." }
+        val bundled = bundledBuffer ?: return
+        val merged = CircuitOverlayMerger.merge(bundled, copyToDirectBuffer(overlayGlb))
+        loadModelOrRestorePrevious(merged, isBreadboard = true)
         updateOverlayVisibility()
     }
 
@@ -235,8 +256,9 @@ internal class NativeBreadboardRenderer(
      * prior direct source and restore it if a structurally valid but non-renderable
      * remote model is rejected by Filament.
      */
-    private fun loadModelOrRestorePrevious(replacement: ByteBuffer) {
+    private fun loadModelOrRestorePrevious(replacement: ByteBuffer, isBreadboard: Boolean) {
         val previous = sourceBuffer
+        val previousIsBreadboard = sourceIsBreadboard
         try {
             resetModelDerivedState()
             replacement.rewind()
@@ -244,8 +266,9 @@ internal class NativeBreadboardRenderer(
             val asset = checkNotNull(modelViewer.asset) { "Filament could not parse this GLB." }
             // Validate the existing renderer's documented source-axis contract now,
             // rather than allowing a bad bounds value to fail inside a frame callback.
-            assetLocalTransform = buildAssetLocalTransform(asset)
             sourceBuffer = replacement
+            sourceIsBreadboard = isBreadboard
+            assetLocalTransform = buildAssetLocalTransform(asset)
         } catch (error: Exception) {
             if (previous != null && previous !== replacement) {
                 runCatching {
@@ -255,12 +278,20 @@ internal class NativeBreadboardRenderer(
                     modelViewer.asset?.let { assetLocalTransform = buildAssetLocalTransform(it) }
                 }
                 sourceBuffer = previous
+                sourceIsBreadboard = previousIsBreadboard
             }
             throw IllegalArgumentException(
                 "Filament could not load that GLB. The previous model was restored.",
                 error,
             )
         }
+    }
+
+    /** The breadboard's own bounds drive placement even after the overlay extends them. */
+    private fun captureBreadboardBounds() {
+        val bounds = modelViewer.asset?.boundingBox ?: return
+        breadboardCenter = bounds.center.copyOf()
+        breadboardHalfExtent = bounds.halfExtent.copyOf()
     }
 
     private fun resetModelDerivedState() {
@@ -346,16 +377,21 @@ internal class NativeBreadboardRenderer(
     }
 
     /**
-     * Builds R_x(-90°) * scale * translate(-bounds.center).
+     * Builds R_x(rotation) * scale * translate(-bounds.center).
      *
-     * The supplied GLB has X as its long edge, Y as its upright axis, and Z as its short edge.
-     * A -90° X rotation maps those axes to board X, board normal -Z (toward the
-     * camera for this solver), and board +Y respectively.
+     * The supplied GLB has X as its long edge and Z as its short edge, but the CAD model
+     * is authored hole-side down: its painted hole face is the -Y side. The bundled
+     * breadboard therefore rotates +90°, which maps -Y to the camera-facing board normal
+     * (-Z) and the blank bottom onto the table. Replacement GLBs follow the documented
+     * overlay contract (Y = model height/up), which the historical -90° already fit.
+     *
+     * The bundled model's own bounds also drive its scale and centering, even after the
+     * circuit overlay extends them with raised wires and the external-device proxy.
      */
     private fun buildAssetLocalTransform(asset: FilamentAsset): FloatArray {
-        val bounds = asset.boundingBox
-        val center = bounds.center
-        val halfExtent = bounds.halfExtent
+        val useBreadboardBounds = sourceIsBreadboard && breadboardCenter != null
+        val center = if (useBreadboardBounds) breadboardCenter!! else asset.boundingBox.center
+        val halfExtent = if (useBreadboardBounds) breadboardHalfExtent!! else asset.boundingBox.halfExtent
         val sourceLength = halfExtent[0] * 2f
         require(sourceLength > 1e-6f) { "Breadboard GLB has no measurable X-axis length." }
 
@@ -365,7 +401,7 @@ internal class NativeBreadboardRenderer(
 
         return FloatArray(16).also { transform ->
             Matrix.setIdentityM(transform, 0)
-            Matrix.rotateM(transform, 0, -90f, 1f, 0f, 0f)
+            Matrix.rotateM(transform, 0, if (sourceIsBreadboard) 90f else -90f, 1f, 0f, 0f)
             Matrix.scaleM(transform, 0, scale, scale, scale)
             Matrix.translateM(transform, 0, -center[0], -center[1], -center[2])
         }
