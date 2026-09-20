@@ -1,10 +1,16 @@
 package com.htn.breadboardar.render
 
 import android.content.res.AssetManager
+import com.htn.breadboardar.circuit.BoardGeometry
+import com.htn.breadboardar.circuit.CircuitDefinition
 import android.opengl.Matrix
 import android.os.Looper
 import android.view.Choreographer
 import android.view.TextureView
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import kotlin.math.*
+import com.google.android.filament.IndirectLight
 import com.google.android.filament.Engine
 import com.google.android.filament.Filament
 import com.google.android.filament.Renderer
@@ -15,10 +21,9 @@ import com.google.android.filament.gltfio.Gltfio
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
- * Draws the supplied breadboard GLB into a transparent [TextureView] above the ARCore camera
+ * Draws the reviewed circuit, assembled from Unity meshes, into a transparent [TextureView] above the ARCore camera
  * image.
  *
  * The pose received from [showBoardNorthOfOutline] is intentionally camera-relative
@@ -34,6 +39,8 @@ import java.nio.ByteOrder
 internal class NativeBreadboardRenderer(
     textureView: TextureView,
     assets: AssetManager,
+    circuit: CircuitDefinition,
+    private val previewMode: Boolean = false,
 ) {
     private val overlay = textureView
     private val choreographer = Choreographer.getInstance()
@@ -55,6 +62,10 @@ internal class NativeBreadboardRenderer(
     private var frameScheduled = false
     private var paused = false
     private var released = false
+    private var ambient: IndirectLight? = null
+    private var previewDistance = .36
+    private var previewYaw = 1.1
+    private var previewPitch = .85
 
     fun setPhysicalBoardWidth(widthMeters: Float) {
         checkMainThread()
@@ -95,23 +106,33 @@ internal class NativeBreadboardRenderer(
 
         configureTransparentView()
         configureCameraRelativeLighting()
-        sourceBuffer = readDirectBuffer(assets, MODEL_ASSET_PATH)
+        ambient = IndirectLight.Builder().irradiance(1, floatArrayOf(.8f,.8f,.8f)).intensity(12000f).build(modelViewer.engine)
+        modelViewer.scene.indirectLight = ambient
+        if (previewMode) {
+            val scale = ScaleGestureDetector(overlay.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    previewDistance = (previewDistance / detector.scaleFactor).coerceIn(.07,.65); return true
+                }
+            })
+            var x=0f; var y=0f
+            overlay.setOnTouchListener { _,event ->
+                scale.onTouchEvent(event)
+                if (event.actionMasked == MotionEvent.ACTION_MOVE && !scale.isInProgress && event.pointerCount == 1) {
+                    previewYaw -= (event.x-x)*.008; previewPitch=(previewPitch+(event.y-y)*.005).coerceIn(.12,1.5)
+                }
+                x=event.x; y=event.y
+                if (event.actionMasked == MotionEvent.ACTION_UP) overlay.performClick()
+                true
+            }
+        }
+        sourceBuffer = CircuitGlbBuilder(
+            BoardGeometry(assets.open("board-map.json").bufferedReader().use { it.readText() }),
+            assets.open(MODEL_ASSET_PATH).use { it.readBytes() },
+            assets.open("models/components.json").bufferedReader().use { it.readText() },
+        ).build(circuit)
         loadModelOrRestorePrevious(sourceBuffer!!)
-        scheduleFrame()
-    }
-
-    /**
-     * Replaces the bundled demonstration model with a verified, self-contained GLB
-     * downloaded from the backend. The caller may discard its buffer after this call:
-     * the renderer keeps its own direct copy alive for Filament's asynchronous loader.
-     */
-    fun replaceModelGlb(downloadedBuffer: ByteBuffer) {
-        checkMainThread()
-        if (released) return
-        require(downloadedBuffer.remaining() > 0) { "The downloaded GLB is empty." }
-        val replacement = copyToDirectBuffer(downloadedBuffer)
-        loadModelOrRestorePrevious(replacement)
         updateOverlayVisibility()
+        scheduleFrame()
     }
 
     /** Supplies ARCore's display-oriented projection matrix (near=.02m, far=20m). */
@@ -178,6 +199,8 @@ internal class NativeBreadboardRenderer(
         checkMainThread()
         if (released) return
         released = true
+        modelViewer.scene.indirectLight = null
+        ambient?.let { modelViewer.engine.destroyIndirectLight(it) }; ambient = null
         boardPose = null
         overlay.alpha = 0f
         if (frameScheduled) {
@@ -215,7 +238,8 @@ internal class NativeBreadboardRenderer(
         val lightManager = modelViewer.engine.lightManager
         val lightInstance = lightManager.getInstance(modelViewer.light)
         if (lightInstance != 0) {
-            lightManager.setDirection(lightInstance, 0f, 0f, -1f)
+            if (previewMode) lightManager.setDirection(lightInstance, -.4f, -1f, -.3f)
+            else lightManager.setDirection(lightInstance, 0f, 0f, -1f)
         }
     }
 
@@ -227,7 +251,7 @@ internal class NativeBreadboardRenderer(
     }
 
     private fun updateOverlayVisibility() {
-        overlay.alpha = if (!released && boardPose != null && cameraProjection != null) 1f else 0f
+        overlay.alpha = if (!released && (previewMode || (boardPose != null && cameraProjection != null))) 1f else 0f
     }
 
     /**
@@ -271,6 +295,15 @@ internal class NativeBreadboardRenderer(
     }
 
     private fun applyLatestState() {
+        if (previewMode) {
+            modelViewer.camera.lookAt(previewDistance*cos(previewPitch)*sin(previewYaw), previewDistance*sin(previewPitch), previewDistance*cos(previewPitch)*cos(previewYaw), 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+            modelViewer.camera.setProjection(42.0, overlay.width.toDouble() / overlay.height.coerceAtLeast(1), .01, 5.0, com.google.android.filament.Camera.Fov.VERTICAL)
+            modelViewer.asset?.let { asset ->
+                val transforms = modelViewer.engine.transformManager
+                transforms.setTransform(transforms.getInstance(asset.root), IDENTITY_MATRIX)
+            }
+            return
+        }
         val projection = cameraProjection ?: return
         // Camera-relative board poses deliberately use an identity Filament camera. Its
         // projection is the exact display-oriented matrix ARCore used for the camera background.
@@ -346,48 +379,18 @@ internal class NativeBreadboardRenderer(
     }
 
     /**
-     * Builds R_x(-90°) * scale * translate(-bounds.center).
-     *
-     * The supplied GLB has X as its long edge, Y as its upright axis, and Z as its short edge.
-     * A -90° X rotation maps those axes to board X, board normal -Z (toward the
-     * camera for this solver), and board +Y respectively.
+     * The assembled scene already uses meters, with X along rows and Y above the board.
+     * A -90° X rotation maps Y to board normal -Z and Z to board +Y.
      */
-    private fun buildAssetLocalTransform(asset: FilamentAsset): FloatArray {
-        val bounds = asset.boundingBox
-        val center = bounds.center
-        val halfExtent = bounds.halfExtent
-        val sourceLength = halfExtent[0] * 2f
-        require(sourceLength > 1e-6f) { "Breadboard GLB has no measurable X-axis length." }
-
-        val scale = BOARD_LENGTH_M / sourceLength
-        modelWidthMeters = halfExtent[2] * 2f * scale
-        modelHeightMeters = halfExtent[1] * 2f * scale
-
+    private fun buildAssetLocalTransform(@Suppress("UNUSED_PARAMETER") asset: FilamentAsset): FloatArray {
+        // CircuitGlbBuilder already outputs meters with board surface at Y=0.
+        // Never normalize by the full scene bounds: an Uno or raised wire must not shrink the board.
+        modelWidthMeters = VIRTUAL_BOARD_WIDTH_M
+        modelHeightMeters = 0f
         return FloatArray(16).also { transform ->
             Matrix.setIdentityM(transform, 0)
             Matrix.rotateM(transform, 0, -90f, 1f, 0f, 0f)
-            Matrix.scaleM(transform, 0, scale, scale, scale)
-            Matrix.translateM(transform, 0, -center[0], -center[1], -center[2])
         }
-    }
-
-    private fun readDirectBuffer(assetManager: AssetManager, path: String): ByteBuffer {
-        val bytes = assetManager.open(path).use { it.readBytes() }
-        return ByteBuffer.allocateDirect(bytes.size)
-            .order(ByteOrder.nativeOrder())
-            .apply {
-                put(bytes)
-                rewind()
-            }
-    }
-
-    private fun copyToDirectBuffer(source: ByteBuffer): ByteBuffer {
-        val input = source.duplicate()
-        val copy = ByteBuffer.allocateDirect(input.remaining())
-            .order(ByteOrder.nativeOrder())
-        copy.put(input)
-        copy.rewind()
-        return copy
     }
 
     private fun checkMainThread() {
@@ -429,6 +432,8 @@ internal class NativeBreadboardRenderer(
     private companion object {
         const val MODEL_ASSET_PATH = "models/breadboard.glb"
         const val BOARD_LENGTH_M = 0.165f
+        // Scene layout width is independent of the physical profile selected by tracking.
+        const val VIRTUAL_BOARD_WIDTH_M = 0.065f
         const val NORTH_GAP_M = 0.03f
         const val SURFACE_CLEARANCE_M = 0.001f
         const val FILAMENT_NEAR_M = 0.02f

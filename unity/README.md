@@ -1,3 +1,9 @@
+## Native Android mesh export (current app path)
+
+The merged native AR viewer reads the selected placement and builds its complete scene on the phone. Run `../scripts/export-native-models.sh` from this directory (or `./scripts/export-native-models.sh` from the repository root) after editing Led, Resistor, or Pushbutton prefabs. The export preserves submeshes and material colors, bakes prefab transforms, converts to right-handed coordinates, and normalizes each artwork uniformly. Android generates exact lead guides from the circuit map; model geometry is still schematic, not certified physical pin geometry. `components.json` is bundled with the app, so no model URL or Unity runtime is required for this native path.
+
+The sections below describe the retained optional embedded Unity renderer.
+
 # Circuit AR on Android
 
 This project embeds the team's Unity meshes in the Android app through **Unity as a Library**. It uses Unity **6000.6.2f1**, AR Foundation **6.6.2**, and the ARCore provider. The Android activity sends the current placement through private app storage and JNI; the Unity scene reads it on startup. There is no laptop renderer, websocket, session polling, or provider key in Unity.

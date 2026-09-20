@@ -1,3 +1,9 @@
+## Native Android integration fix — 2026-09-20
+
+The merged app uses native ARCore/Filament. It now reads the selected `ar-circuit.json`, validates it, and assembles Unity-exported component meshes plus semantic wires instead of displaying only `breadboard.glb`. The same scene is inspectable in the 3D preview. Export prefab changes with `../scripts/export-native-models.sh`. Older embedded Unity notes below describe the retained alternative renderer.
+
+Android now includes the full authoritative default kit in generation requests because an older running server rejected prompt-only bodies. A real OpenRouter LED/button generation was verified. For USB development use `../scripts/run-android-usb.sh`; debug API default is `http://127.0.0.1:8000` via `adb reverse`. A cable-free APK still needs a hosted API URL.
+
 # Circuit API context
 
 Historical web context plus current mobile handoff; updated 2026-09-19. Current product scope spans the native Android app, this backend and `../unity/`. Read `UNITY_HANDOFF.md` for coordinate/asset contracts and rail formulas, `UNITY_TEAM_MESSAGE.md` for the unsent teammate message, `AGENTS.md` for guardrails, `README.md` for run/check commands, `reference/README.md` for provenance. Preserve unrelated worktree changes; never open or package `.env`, credentials, runtime sessions, virtual environments, or agent logs.

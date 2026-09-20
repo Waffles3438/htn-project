@@ -1,3 +1,5 @@
+> Native app update (2026-09-20): the current launcher uses ARCore/Filament and now consumes the selected placement JSON. It assembles the Unity-authored meshes exported by `../scripts/export-native-models.sh`, plus exact semantic lead/wire guides, directly on Android. The 3D preview uses the same scene. No manual GLB URL is required. The embedded Unity importer below remains an alternative renderer; the semantic contract is shared.
+
 # Circuit API → Unity
 
 The Android app receives a validated placement directly from `POST /api/circuits/generate`, draws its schematic, and opens an embedded Unity activity with the same JSON. The renderer now lives in the tracked [`../unity/`](../unity/README.md) project. No session polling or laptop overlay stream is part of the phone flow.

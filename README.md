@@ -1,6 +1,6 @@
 # Circuit — designer + native Android AR
 
-Type a circuit idea on the phone, review its breadboard schematic and assembly steps, then choose **Show beside my board**. That launches the bundled native ARCore viewer, which detects the physical breadboard and places a GLB instructional model next to it. The project no longer needs a laptop renderer, a WebSocket, or a Unity export for this path.
+Type a circuit idea on the phone, review its breadboard schematic and assembly steps, then choose **Show beside my board**. That launches the bundled native ARCore viewer, which tracks the physical breadboard and places the selected circuit beside it. The native renderer assembles the team’s Unity LED, resistor, and button meshes plus wires from the validated placement JSON. The project no longer needs a laptop renderer, a WebSocket, or a Unity export for this path.
 
 The Android app includes the circuit designer, the Python circuit API contract, and the native AR viewer. Physical alignment must still be verified on an ARCore-capable phone. The Unity project remains in the repository as an optional alternative renderer, not as the launcher's required AR module.
 
@@ -44,7 +44,15 @@ adb devices
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Set a deployed API origin in the app's **Settings**, or bake it into a build with `-PcircuitApiUrl=https://your-service.vercel.app`. Debug builds accept a local HTTP origin such as `http://10.0.2.2:8000`; release builds require HTTPS. Offline examples are explicitly labeled and work without a backend or API key.
+For a **USB-connected phone**, enable USB debugging, accept its connection prompt, then run:
+
+```sh
+./scripts/run-android-usb.sh
+```
+
+This starts the local API if necessary, checks that the provider is configured, forwards the phone’s port 8000 to the Mac with `adb reverse`, builds, and installs. Debug APKs default to `http://127.0.0.1:8000`. If you previously saved another address, set this URL in the app’s **Settings**. Keep the cable connected and the API running. Try **make red led with button**, review the schematic, choose **Preview complete circuit in 3D**, then **Show beside my board**. No GLB URL needs to be entered.
+
+For an APK used without the Mac, set a deployed API origin in **Settings**, or build with `-PcircuitApiUrl=https://your-service.vercel.app`. Release builds require HTTPS. The API must have its provider key configured; keys stay off the phone. Offline examples remain explicitly labeled.
 
 For another machine, install JDK 17, Android SDK 35 + build tools 36, NDK r27c (`27.2.12479018`), CMake 3.22.1, and the matching Unity editor with Android Build Support. Set `JAVA_HOME`, `ANDROID_HOME`, and `UNITY_EDITOR`, plus `sdk.dir` in local.properties if your IDE needs it. AGP 9.0/Gradle 9.1 matches the Unity version's generated build; Kotlin is provided by AGP.
 
@@ -58,7 +66,11 @@ See [API hosting](circuit-api/README.md). The Vercel bundle excludes the React w
 
 [Unity project and export](unity/README.md) documents the AR scene, tracked importer, prefab provenance, calibration and device checks. Models and metadata from the team's Unity branch are preserved. Their geometry is reused as schematic artwork with exact generated lead guides; unmeasured prefab anchors are not treated as verified physical pins. The Uno is a labeled schematic proxy because the team branch has no Uno prefab.
 
-The native app atomically saves the last valid circuit. On AR entry it writes the selected placement JSON to private app storage, then launches `ArViewerActivity`. The optional Unity handoff remains available for the Unity project, but it is not used by the native viewer launch path.
+The native app atomically saves the last valid circuit. On preview/AR entry it writes that exact placement to `ar-circuit.json`. `CircuitGlbBuilder` validates it and creates one self-contained scene from the bundled detailed board, Unity component geometry/materials, and generated leads/wires. Board coordinates remain in meters even when external devices expand the scene bounds. The camera-free preview and AR viewer use the same builder.
+
+After your teammate updates prefabs, run `./scripts/export-native-models.sh` and rebuild Android. The editor exports mesh geometry and source material colors into `app/src/main/assets/models/components.json`; Android does not require Unity running or an exported Unity library for this path. The existing optional embedded Unity integration is retained. When present, its ARCore runtime is shared instead of packaging a conflicting second AAR.
+
+The app sends the complete default kit with each prompt. This also works against older running servers that reject prompt-only requests. `scripts/sync-mobile-assets.py` regenerates the kit from the backend authority.
 
 ## Checks and current acceptance
 
@@ -74,6 +86,6 @@ source scripts/android-env.sh
 ./gradlew :app:connectedDebugAndroidTest  # running emulator or USB device
 ```
 
-Verified here: 59 backend tests, 8 Android contract tests, 3 Android emulator flow tests, 5 Unity EditMode tests, full ARM64 Unity library export, embedded Android APK assembly and lint, and a Unity scene render with the bundled component meshes. The emulator reaches Unity’s explicit unsupported-AR screen with the reviewed circuit loaded. Physical camera tracking, calibration accuracy, and repeated AR entry/exit require acceptance on an ARCore phone. No hosted API deployment was created in this session. `physicalVerified=false` is intentional.
+Current verification: Android build and lint, 47 native unit tests (including calibration/tracking tests and circuit-to-GLB regression tests), and Khronos glTF validation of all three generated scenes with zero errors or warnings. Emulator flow tests cover request compatibility, review persistence, failure recovery, and rendered 3D preview. The opt-in live-provider test passed with **make red led with button**, verified an OpenRouter response rather than a fixture, and rendered the generated circuit through the app’s native 3D screen.
 
-The emulator network tests use a local fake provider response; they do not spend API credits. A real generation requires a configured provider on your deployed API. After installing, open **Settings**, enter that API origin, generate a circuit, review its steps, then choose **Show beside my board** and allow the camera. In the viewer, load the generated self-contained GLB URL and calibrate the physical breadboard.
+Physical tracking and hole alignment still require acceptance on an ARCore phone; `physicalVerified=false` remains intentional. No new hosted deployment was created. The live local API is reached over USB for development.

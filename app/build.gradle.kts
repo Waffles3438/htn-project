@@ -38,6 +38,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            val localApi = providers.gradleProperty("circuitApiUrl").orElse("http://127.0.0.1:8000").get()
+            buildConfigField("String", "CIRCUIT_API_URL", "\"$localApi\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -69,7 +73,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("com.google.ar:core:1.33.0")
+    // A Unity export already supplies the ARCore runtime. Compile against the native
+    // API without packaging a second ARCore AAR with the same namespace.
+    if (unityAvailable) compileOnly("com.google.ar:core:1.33.0")
+    else implementation("com.google.ar:core:1.33.0")
     // Filament publishes Android releases as AARs on its official GitHub release
     // page, rather than the Maven artifacts that older setup guides reference.
     // Bundling the matched 1.71.4 set keeps debug APK builds reproducible. This is
@@ -89,6 +96,7 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.google.ar:core:1.33.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

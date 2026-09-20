@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
         }
         board = BoardGeometry(assets.open("board-map.json").bufferedReader().use { it.readText() })
         schematic = findViewById<BreadboardView>(R.id.breadboard_view).also { it.board = board }
-        api = CircuitApiClient { prefs.getString("api_url", ApiConfig.baseUrl).orEmpty() }
+        api = CircuitApiClient(assets.open("default-kit.json").bufferedReader().use { it.readText() }) { prefs.getString("api_url", ApiConfig.baseUrl).orEmpty() }
         findViewById<Button>(R.id.settings_button).setOnClickListener { settings() }
         findViewById<Button>(R.id.generate_button).setOnClickListener { generate() }
         findViewById<Button>(R.id.example_led).setOnClickListener { setPrompt("Turn on a red LED") }
@@ -79,6 +79,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.fit_button).setOnClickListener { schematic.fit() }
         findViewById<Button>(R.id.previous_step).setOnClickListener { step--; renderStep() }
         findViewById<Button>(R.id.next_step).setOnClickListener { step++; renderStep() }
+        findViewById<Button>(R.id.preview_3d_button).setOnClickListener {
+            circuit?.let { model ->
+                File(filesDir, "ar-circuit.json").writeText(model.rawJson)
+                startActivity(Intent(this, CircuitPreviewActivity::class.java))
+            }
+        }
         findViewById<Button>(R.id.show_ar_button).setOnClickListener { openAr() }
         findViewById<Button>(R.id.firmware_button).setOnClickListener { showFirmware() }
         prompt.setText(prefs.getString("prompt", ""))
@@ -161,7 +167,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(32, 24, 32, 24)
         }
         val dialog = MaterialAlertDialogBuilder(this).setTitle("Circuit service")
-            .setMessage("Use the HTTPS address of your deployed circuit API. Offline examples work without a service.")
+            .setMessage("Use your hosted HTTPS circuit API. For a debug APK over USB, run scripts/run-android-usb.sh and use http://127.0.0.1:8000.")
             .setView(field).setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
         dialog.setOnShowListener { dialog.getButton(-1).setOnClickListener {
             val text = field.text.toString().trim().trimEnd('/')
@@ -181,8 +187,8 @@ class MainActivity : AppCompatActivity() {
     private fun launchArViewer() {
         val model = circuit ?: return
         // Retain the selected circuit as private app data for the AR handoff. This
-        // avoids Binder's payload limit and lets the viewer later load a generated
-        // placement model without changing the navigation contract.
+        // avoids Binder's payload limit. The native viewer validates this exact JSON
+        // and assembles the bundled Unity meshes and wires on the phone.
         File(filesDir, "ar-circuit.json").writeText(model.rawJson)
         startActivity(Intent(this, ArViewerActivity::class.java))
     }

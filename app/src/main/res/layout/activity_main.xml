@@ -31,6 +31,7 @@
                     <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="@string/ui_pinch_to_zoom_drag_to_explore" android:textColor="#617365" android:textSize="12sp"/>
                     <com.google.android.material.button.MaterialButton android:id="@+id/fit_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="48dp" android:text="@string/ui_fit"/>
                 </LinearLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/preview_3d_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="Preview complete circuit in 3D"/>
                 <com.google.android.material.button.MaterialButton android:id="@+id/show_ar_button" android:layout_width="match_parent" android:layout_height="58dp" android:text="@string/ui_show_beside_my_board" android:textSize="16sp"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/ui_keep_power_disconnected_while_assembling_this_is_a_wiring_guide_c" android:textSize="12sp" android:textColor="#7C6848" android:lineSpacingExtra="3dp"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:text="@string/ui_your_parts" android:textSize="21sp" android:textStyle="bold" android:textColor="#183F31"/>

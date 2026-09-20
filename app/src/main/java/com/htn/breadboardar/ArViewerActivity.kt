@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -25,22 +24,21 @@ import com.htn.breadboardar.ar.ArCameraPreview
 import com.htn.breadboardar.ar.BoardCalibration
 import com.htn.breadboardar.ar.CameraState
 import com.htn.breadboardar.ar.ThreePointCalibrator
-import com.htn.breadboardar.network.GlbModelDownloader
+import com.htn.breadboardar.circuit.CircuitDefinition
+import java.io.File
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.htn.breadboardar.render.NativeBreadboardRenderer
 import com.htn.breadboardar.ui.CalibrationOverlayView
 
-class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModelDownloader.Listener {
+class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener {
     private lateinit var preview: ArCameraPreview
     private lateinit var overlay: CalibrationOverlayView
     private lateinit var nativeBreadboardRenderer: NativeBreadboardRenderer
     private lateinit var statusText: TextView
-    private lateinit var modelUrl: EditText
-    private lateinit var loadModelButton: Button
     private lateinit var calibrateButton: Button
     private lateinit var resetButton: Button
 
     private val calibrator = ThreePointCalibrator()
-    private val modelDownloader = GlbModelDownloader(this)
     private var arSession: Session? = null
     private var activeCalibration: BoardCalibration? = null
     private var pendingCalibrationTap: PointF? = null
@@ -71,13 +69,27 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
 
         preview = findViewById(R.id.ar_preview)
         overlay = findViewById(R.id.calibration_overlay)
-        nativeBreadboardRenderer = NativeBreadboardRenderer(
-            textureView = findViewById(R.id.model_overlay),
-            assets = assets,
-        )
+        val circuit = runCatching {
+            val file = File(filesDir, "ar-circuit.json")
+            require(file.isFile && file.length() <= 1024 * 1024) { "Choose a circuit in the designer first." }
+            CircuitDefinition.parse(file.readText())
+        }.getOrElse {
+            MaterialAlertDialogBuilder(this).setTitle("Could not open circuit")
+                .setMessage(it.message).setPositiveButton("Back to circuit") { _, _ -> finish() }
+                .setOnCancelListener { finish() }.show()
+            return
+        }
+        try {
+            nativeBreadboardRenderer = NativeBreadboardRenderer(
+                textureView = findViewById(R.id.model_overlay), assets = assets, circuit = circuit,
+            )
+        } catch (error: Exception) {
+            MaterialAlertDialogBuilder(this).setTitle("Could not build circuit models")
+                .setMessage(error.message).setPositiveButton("Back to circuit") { _, _ -> finish() }
+                .setOnCancelListener { finish() }.show()
+            return
+        }
         statusText = findViewById(R.id.status_text)
-        modelUrl = findViewById(R.id.model_url)
-        loadModelButton = findViewById(R.id.load_model_button)
         calibrateButton = findViewById(R.id.calibrate_button)
         resetButton = findViewById(R.id.reset_button)
 
@@ -93,29 +105,29 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
             }
         }
 
-        loadModelButton.setOnClickListener(::loadGlbFromUrl)
+        findViewById<Button>(R.id.back_to_circuit).setOnClickListener { finish() }
         calibrateButton.setOnClickListener(::beginCalibration)
         resetButton.setOnClickListener { resetCalibration("Calibration reset. Tap Calibrate to begin again.") }
-        showStatus("Tap Calibrate to find your breadboard. Optionally load a .glb model from your backend.")
+        showStatus("${circuit.title} is ready with ${circuit.components.size + circuit.externalDevices.size} parts and ${circuit.jumperWires.size} wires. Tap Calibrate to find your breadboard.")
     }
 
     override fun onResume() {
         super.onResume()
+        if (!::nativeBreadboardRenderer.isInitialized) return
         nativeBreadboardRenderer.resume()
         startAr()
     }
 
     override fun onPause() {
-        nativeBreadboardRenderer.pause()
+        if (::nativeBreadboardRenderer.isInitialized) nativeBreadboardRenderer.pause()
         preview.onPause()
         arSession?.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
-        nativeBreadboardRenderer.destroy()
+        if (::nativeBreadboardRenderer.isInitialized) nativeBreadboardRenderer.destroy()
         preview.release()
-        modelDownloader.close()
         arSession?.close()
         super.onDestroy()
     }
@@ -221,38 +233,6 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
         if (isFirst) {
             showStatus("Board anchored. The yellow outline should stay on the breadboard as you move.")
         }
-    }
-
-    override fun onGlbDownloaded(buffer: java.nio.ByteBuffer, sourceUrl: String) {
-        loadModelButton.isEnabled = true
-        runCatching { nativeBreadboardRenderer.replaceModelGlb(buffer) }
-            .onSuccess {
-                showStatus("Loaded .glb model from ${sourceUrl.substringAfterLast('/')}. Calibrate to place it.")
-            }
-            .onFailure { error ->
-                showStatus(error.message ?: "The downloaded GLB could not be rendered.")
-            }
-    }
-
-    override fun onGlbDownloadFailed(message: String) {
-        loadModelButton.isEnabled = true
-        showStatus(message)
-    }
-
-    private fun loadGlbFromUrl(@Suppress("UNUSED_PARAMETER") view: View) {
-        val url = modelUrl.text.toString().trim()
-        if (url.isBlank()) {
-            showStatus("Enter the direct HTTP(S) URL of a .glb file.")
-            return
-        }
-        runCatching { modelDownloader.download(url) }
-            .onSuccess {
-                loadModelButton.isEnabled = false
-                showStatus("Downloading .glb model…")
-            }
-            .onFailure { error ->
-                showStatus(error.message ?: "Could not start the GLB download.")
-            }
     }
 
     private fun beginCalibration(@Suppress("UNUSED_PARAMETER") view: View) {

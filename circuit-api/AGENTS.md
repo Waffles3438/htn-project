@@ -27,11 +27,11 @@ Export regenerates schemas/fixture pairs and the ignored `handoff/board-hole-map
 
 ## Still requires hardware / Unity acceptance
 
-Check actual A1/J1/A63 and both rail-side mesh alignment, rail offsets/group gaps/continuity, switch spacing/internal pairs, component pin geometry, positive-height calibration sign, Uno anchors and firmware upload. Local tests do not verify physical fit or XR. The Android-first migration now modifies the native app and tracked `../unity/` renderer. Unity editor export and device acceptance remain pending license activation.
+Check actual A1/J1/A63 and both rail-side mesh alignment, rail offsets/group gaps/continuity, switch spacing/internal pairs, component pin geometry, positive-height calibration sign, Uno anchors and firmware upload. Local tests do not verify physical fit or XR. The Android-first migration now modifies the native app and tracked `../unity/` renderer. Unity editor export is verified; physical-device acceptance remains.
 
 ## Android-first integration (current)
 
-- Product flow is native Android prompt → schematic → embedded on-device Unity AR. The former Kotlin camera/PNG WebSocket client was removed.
+- Product flow is native Android prompt → schematic/3D preview → native ARCore/Filament, with Unity-authored component meshes exported by `../scripts/export-native-models.sh`. The optional embedded Unity project is retained. The former Kotlin camera/PNG WebSocket client was removed.
 - Keep Python generation/electrical validation server-side. Vercel is stateless and never writes session files; Android saves the response. The website and mock-server are optional reference tools, excluded from deployment.
 - Importer source is `../unity/Assets/CircuitXR/Runtime/`; export reads it from there. After exporting, run `python ../scripts/sync-mobile-assets.py` to synchronize native/Unity assets.
 - Preserve the team's prefab/FBX/material bytes in `../unity/Assets`. Current models are schematic artwork with exact generated hole/lead guides; the button's anchors are incomplete and the Uno is a proxy. Do not claim measured prefab fit.

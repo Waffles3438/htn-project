@@ -14,7 +14,10 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class CircuitApiClient(private val baseUrlProvider: () -> String = { ApiConfig.baseUrl }) {
+class CircuitApiClient(
+    private val kitJson: String,
+    private val baseUrlProvider: () -> String = { ApiConfig.baseUrl },
+) {
     private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(150, TimeUnit.SECONDS).callTimeout(160, TimeUnit.SECONDS).build()
     private val main = Handler(Looper.getMainLooper())
@@ -28,13 +31,13 @@ class CircuitApiClient(private val baseUrlProvider: () -> String = { ApiConfig.b
         cancel()
         val request = try {
             Request.Builder().url(baseUrlProvider().trimEnd('/') + "/api/circuits/generate")
-                .post(JSONObject().put("prompt", prompt).put("sessionId", sessionId).toString()
+                .post(JSONObject(kitJson).put("prompt", prompt).put("sessionId", sessionId).toString()
                     .toRequestBody("application/json; charset=utf-8".toMediaType())).build()
         } catch (_: IllegalArgumentException) { callback(Result.Failure("Check the circuit service URL in Settings.")); return }
         val call = client.newCall(request); active = call
         fun deliver(result: Result) { main.post { if (active === call && !call.isCanceled()) { active = null; callback(result) } } }
         call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { deliver(Result.Failure("Couldn't reach the circuit service. Check your connection and try again.")) }
+            override fun onFailure(call: Call, e: IOException) { deliver(Result.Failure("Couldn't reach the circuit service. For USB testing, run scripts/run-android-usb.sh with the phone connected. For a hosted build, check the URL in Settings.")) }
             override fun onResponse(call: Call, response: Response) {
                 val result = try {
                     response.use {
@@ -46,6 +49,7 @@ class CircuitApiClient(private val baseUrlProvider: () -> String = { ApiConfig.b
                             val error = runCatching { JSONObject(body).optJSONObject("error") }.getOrNull()
                             val message = when (error?.optString("code")) {
                                 "UNSUPPORTED_CIRCUIT", "UNSUPPORTED_PART", "MISSING_PARTS", "INVALID_REQUEST" -> error.optString("message", "This circuit is not supported by the current kit.")
+                                "PROVIDER_ERROR", "PROVIDER_UNAVAILABLE", "INVALID_PROVIDER", "INVALID_PROVIDER_RESPONSE", "INCOMPLETE_GENERATION" -> error.optString("message", "The model provider could not complete this circuit.")
                                 "BUSY" -> "The circuit service is busy. Try again in a moment."
                                 "API_KEY_MISSING", "WRONG_PROVIDER_KEY" -> "Your circuit service needs its model key configured."
                                 else -> "Couldn't generate a circuit. Please try again."

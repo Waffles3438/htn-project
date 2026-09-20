@@ -37,6 +37,7 @@ class CircuitFlowTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 if (failGeneration) return MockResponse().setResponseCode(503).setBody("{\"error\":{\"code\":\"PROVIDER_UNAVAILABLE\"}}")
                 val sent = JSONObject(request.body.readUtf8())
+                if (!sent.has("availableParts") || !sent.has("breadboardModel")) return MockResponse().setResponseCode(400).setBody("{\"error\":{\"code\":\"INVALID_REQUEST\",\"message\":\"Full kit required\"}}")
                 val fixture = JSONObject(context.assets.open("led.placement.json").bufferedReader().use { it.readText() })
                 fixture.put("sessionId", sent.getString("sessionId"))
                 return MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody(fixture.toString())
@@ -47,6 +48,7 @@ class CircuitFlowTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
     }
     @After fun tearDown() {
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         scenario.close(); server.shutdown()
         context.getSharedPreferences("circuit", Context.MODE_PRIVATE).edit().remove("api_url").commit()
     }
@@ -89,21 +91,70 @@ class CircuitFlowTest {
         onView(withId(R.id.return_button)).perform(scrollTo(), click())
         onView(withId(R.id.circuit_title)).check(matches(withText("Simple LED")))
     }
-    @Test fun unityEntryReceivesTheReviewedCircuit() {
-        if (!BuildConfig.UNITY_AVAILABLE) return
-        generate()
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
-            .grantRuntimePermission(context.packageName, android.Manifest.permission.CAMERA)
-        onView(withId(R.id.show_ar_button)).perform(scrollTo(), click())
+    private fun capturePreview() {
+        onView(withId(R.id.preview_3d_button)).perform(scrollTo(), click())
         val saved = File(context.filesDir, "last-circuit.json").readText()
-        assertEquals(saved, File(context.filesDir, "unity-circuit.json").readText())
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        Thread.sleep(12000) // Allow IL2CPP and the AR provider to initialize on the emulator.
-        assertTrue("Unity process must survive startup", manager.runningAppProcesses.any { it.processName == context.packageName + ":unity" })
-        val screenshot = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        File(context.getExternalFilesDir(null), "unity-startup.png").outputStream().use {
-            screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        assertEquals(saved, File(context.filesDir, "ar-circuit.json").readText())
+        Thread.sleep(4000) // Filament asynchronously uploads the actual mesh resources.
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        var screenshot: android.graphics.Bitmap? = null
+        instrumentation.runOnMainSync {
+            val activity = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).filterIsInstance<CircuitPreviewActivity>().single()
+            fun texture(view: android.view.View): android.view.TextureView? {
+                if (view is android.view.TextureView) return view
+                if (view is android.view.ViewGroup) for (i in 0 until view.childCount) texture(view.getChildAt(i))?.let { return it }
+                return null
+            }
+            screenshot = texture(activity.window.decorView)?.bitmap
+        }
+        val bitmap = requireNotNull(screenshot) { "Native renderer did not produce an image" }
+        val colors = mutableSetOf<Int>()
+        for (y in 0 until bitmap.height step 5) for (x in 0 until bitmap.width step 5) colors.add(bitmap.getPixel(x,y))
+        assertTrue("Circuit preview must contain rendered geometry", colors.size > 100)
+        File(context.getExternalFilesDir(null), "native-circuit-preview.png").outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        val screen=instrumentation.uiAutomation.takeScreenshot()
+        File(context.getExternalFilesDir(null), "native-circuit-screen.png").outputStream().use { screen.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        instrumentation.runOnMainSync {
+            androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).filterIsInstance<CircuitPreviewActivity>().forEach { it.finish() }
         }
     }
-
+    @Test fun nativePreviewReceivesAndRendersTheReviewedCircuit() {
+        generate()
+        capturePreview()
+    }
+    @Test fun nativeArOpensTheReviewedCircuitWithoutManualModelUrl() {
+        generate()
+        val instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.CAMERA)
+        onView(withId(R.id.show_ar_button)).perform(scrollTo(), click())
+        Thread.sleep(3000)
+        assertEquals(File(context.filesDir,"last-circuit.json").readText(),File(context.filesDir,"ar-circuit.json").readText())
+        instrumentation.runOnMainSync {
+            val activity=androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).filterIsInstance<ArViewerActivity>().single()
+            assertNotNull(activity.findViewById<android.view.TextureView>(R.id.model_overlay))
+            activity.finish()
+        }
+    }
+    @Test fun liveButtonPromptThroughReviewAndNativeModels() {
+        val liveUrl = androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("liveApi")
+        org.junit.Assume.assumeTrue("Opt-in live provider check", !liveUrl.isNullOrBlank())
+        context.getSharedPreferences("circuit", Context.MODE_PRIVATE).edit().putString("api_url",liveUrl).commit()
+        onView(withId(R.id.prompt_input)).perform(scrollTo(), androidx.test.espresso.action.ViewActions.replaceText("make red led with button"))
+        onView(withId(R.id.generate_button)).perform(scrollTo(), click())
+        val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(160)
+        val saved=File(context.filesDir,"last-circuit.json")
+        while (!saved.isFile && System.nanoTime()<deadline) Thread.sleep(200)
+        assertTrue("Live generation did not save a validated circuit",saved.isFile)
+        val model=JSONObject(saved.readText())
+        assertNotEquals("fixture",model.getString("source"))
+        val parts=model.getJSONArray("components")
+        assertTrue((0 until parts.length()).any { parts.getJSONObject(it).getString("type")=="button" })
+        awaitText(R.id.circuit_title, model.getString("title"))
+        capturePreview()
+    }
 }

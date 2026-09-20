@@ -48,16 +48,6 @@
         android:orientation="vertical"
         android:padding="12dp">
 
-        <EditText
-            android:id="@+id/model_url"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="GLB model URL (https://…/scene.glb)"
-            android:inputType="textUri"
-            android:maxLines="1"
-            android:textColor="@color/viewer_text"
-            android:textColorHint="#B3FFFFFF" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -65,11 +55,11 @@
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/load_model_button"
+                android:id="@+id/back_to_circuit"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Load GLB" />
+                android:text="Back to circuit" />
 
             <Button
                 android:id="@+id/calibrate_button"
