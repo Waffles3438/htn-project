@@ -11,7 +11,7 @@ from .board import BOARD, WARNING
 from .fixtures import fixture, PROMPTS
 from .nets import build_nets
 from .provider import CircuitProvider
-from .validation import CircuitError, schema_check, validate_request, validate_plan, validate_layout
+from .validation import CircuitError, schema_check, normalize_request, validate_request, validate_plan, validate_layout
 
 ASSETS = {"led": "led_red_v1", "resistor": "resistor_220ohm_v1", "button": "button_momentary_v1", "power_supply": "power_supply_5v_v1"}
 ORDER = {"led": ["anode", "cathode"], "resistor": ["a", "b"], "button": ["a1", "b1", "a2", "b2"], "power_supply": ["positive", "negative"]}
@@ -68,18 +68,21 @@ def make_placement(request, plan, draft, source):
 
 
 class CircuitService:
-    def __init__(self, data_dir=None, provider=None):
+    def __init__(self, data_dir=None, provider=None, persist=True):
         self.data_dir = Path(data_dir) if data_dir else contracts.ROOT / "data"
         self.provider = provider or CircuitProvider()
+        self.persist = persist
         self.lock = threading.Lock()
 
     def analyze(self, request):
+        request = normalize_request(request)
         inventory = validate_request(request)
         plan = self.provider.analyze(request)
         validate_plan(plan, inventory)
         return plan
 
     def generate(self, request):
+        request = normalize_request(request)
         plan = self.analyze(request)
         draft = self.provider.layout(request, plan)
         placement = make_placement(request, plan, draft, getattr(self.provider, "source", "openai"))
@@ -87,15 +90,17 @@ class CircuitService:
         return placement
 
     def demo(self, name, request):
-        validate_request(request)
         plan, draft = fixture(name)
         # Demo endpoint is explicitly a named lesson, with truthful provenance.
-        request = {**request, "prompt": PROMPTS[name]}
+        request = normalize_request({**request, "prompt": PROMPTS[name]})
+        validate_request(request)
         placement = make_placement(request, plan, draft, "fixture")
         self.save(placement)
         return placement
 
     def save(self, placement):
+        if not self.persist:
+            return
         self.data_dir.mkdir(parents=True, exist_ok=True)
         destination = self.data_dir / (placement["sessionId"] + ".placement.json")
         with self.lock:
@@ -109,6 +114,8 @@ class CircuitService:
                     os.unlink(temporary)
 
     def latest(self, session_id):
+        if not self.persist:
+            raise CircuitError("NOT_FOUND", "This host returns circuits directly; session polling is disabled.", 404)
         schema_check(session_id, contracts.REQUEST["properties"]["sessionId"], "INVALID_SESSION", 400)
         path = self.data_dir / (session_id + ".placement.json")
         if not path.is_file():

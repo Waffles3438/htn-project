@@ -17,3 +17,11 @@ circuit-api/.venv/
 circuit-api/.backboard/
 circuit-api/.env
 circuit-api/data/
+
+# Local Unity export and editor state
+unity-export/
+unity/Library/
+unity/Temp/
+unity/Logs/
+unity/obj/
+unity/UserSettings/

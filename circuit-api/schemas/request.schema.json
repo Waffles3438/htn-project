@@ -55,10 +55,7 @@
     }
   },
   "required": [
-    "prompt",
-    "availableParts",
-    "breadboardModel",
-    "sessionId"
+    "prompt"
   ],
   "additionalProperties": false
 }

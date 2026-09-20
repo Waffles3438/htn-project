@@ -1,8 +1,14 @@
 # Circuit API context
 
-Single handoff doc for design, planning, and implementation of the circuit website. Scope: **this `circuit-api/` folder only**; updated 2026-09-19. Read `UNITY_HANDOFF.md` for coordinate/asset contracts and rail formulas, `UNITY_TEAM_MESSAGE.md` for the unsent teammate message, `AGENTS.md` for guardrails, `README.md` for run/check commands, `reference/README.md` for provenance. Preserve unrelated worktree changes; never open or package `.env`, credentials, runtime sessions, virtual environments, or agent logs.
+Historical web context plus current mobile handoff; updated 2026-09-19. Current product scope spans the native Android app, this backend and `../unity/`. Read `UNITY_HANDOFF.md` for coordinate/asset contracts and rail formulas, `UNITY_TEAM_MESSAGE.md` for the unsent teammate message, `AGENTS.md` for guardrails, `README.md` for run/check commands, `reference/README.md` for provenance. Preserve unrelated worktree changes; never open or package `.env`, credentials, runtime sessions, virtual environments, or agent logs.
 
-## Stack rules
+## Current mobile architecture
+
+The product flow is native Android prompt → semantic placement-v3 → native schematic → embedded Unity AR. See `../README.md` and `../unity/README.md` for build and acceptance status. Unity source is tracked under `../unity/Assets/CircuitXR/Runtime`, and the exporter packages it from there. `server.py` is local-development only; Vercel runs WSGI statelessly without session writes. No Python runtime, browser, session-code entry, laptop renderer or websocket is required on the phone.
+
+Android build/lint/8 contract tests and backend 59 tests pass. Three instrumented emulator tests pass for generation/review, failure recovery, and launching the embedded Unity activity with the reviewed circuit. Unity library export, the full Android APK, and 5 Unity EditMode tests pass; physical AR still needs device acceptance. Three-point calibration is A1/J1/A63 on a flat board; AR Foundation coordinates require no legacy Kotlin reflection. Team meshes are preserved as uniformly sized schematic artwork with exact generated lead guides, not certified physical pin geometry.
+
+## Historical reference website stack
 
 - Web app. The frontend is a Vite + React + TypeScript SPA under `web/` (decided 2026-09-19, superseding the vanilla-JS `static/` page, which remains as a fallback served only when `web/dist/` is absent). Extend the existing React patterns in `web/src`; no new frameworks or UI libraries; plain CSS in `web/src/styles.css` keeps the warm off-white/dark-green identity.
 - Never add Python for UI rendering, layout math, component definitions, or state. Python's role is the existing backend only, which returns the structured JSON circuit model the browser renders. No backend image generation: generate circuit JSON, then let the website and Unity/XR each render it independently.
@@ -73,8 +79,8 @@ cd web && npm run build && cd ..
 git diff --check
 ```
 
-Optional browser check: install Playwright separately and run `BROWSER_EXECUTABLE=/path/to/chromium python tests/browser_check.py` (isolated temporary sessions, no paid provider calls; screenshots `/tmp/circuit-*.png`). It drives the built React app when `web/dist/` exists, else the legacy page. Export regenerates schemas/fixture pairs plus the ignored `handoff/board-hole-map.meters.json` and `handoff/circuit-api-to-unity.zip` (this context, both Unity docs, placement schema, all three placement fixtures, board map, board assets). Generated files must match code — never hand-edit them. A local ZIP is not proof it was sent.
+Optional browser check: install Playwright separately and run `BROWSER_EXECUTABLE=/path/to/chromium python tests/browser_check.py` (isolated temporary sessions, no paid provider calls; screenshots `/tmp/circuit-*.png`). It drives the built React app when `web/dist/` exists, else the legacy page. Export regenerates schemas/fixture pairs plus the ignored `handoff/board-hole-map.meters.json` and `handoff/circuit-api-to-unity.zip` (this context, both Unity docs, placement schema, all three placement fixtures, board map, board assets, and the `unity/` C# importer). Generated files must match code — never hand-edit them. A local ZIP is not proof it was sent.
 
 ## Still requires hardware / Unity acceptance
 
-Check actual A1/J1/A63 and both rail-side mesh alignment, rail offsets/group gaps/continuity, switch spacing/internal pairs, component pin geometry, positive-height calibration sign, Uno anchors and firmware upload. Local tests do not verify physical fit or XR. This task does not modify the Unity renderer or Android transport.
+Check actual A1/J1/A63 and both rail-side mesh alignment, rail offsets/group gaps/continuity, switch spacing/internal pairs, component pin geometry, positive-height calibration sign, Uno anchors and firmware upload. Local tests do not verify physical fit or XR. The current mobile migration replaces the legacy Android camera transport and adds the on-device Unity project; these physical acceptance items remain.

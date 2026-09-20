@@ -1,99 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@android:color/black">
-
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <com.htn.breadboardar.ar.ArCameraPreview
-            android:id="@+id/ar_preview"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <com.htn.breadboardar.ui.CalibrationOverlayView
-            android:id="@+id/calibration_overlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <TextView
-            android:id="@+id/status_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|start"
-            android:layout_margin="16dp"
-            android:background="@color/viewer_overlay"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp"
-            android:textColor="@color/viewer_text"
-            android:textSize="14sp" />
-    </FrameLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/viewer_overlay"
-        android:orientation="vertical"
-        android:padding="12dp">
-
-        <EditText
-            android:id="@+id/server_url"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Laptop WebSocket URL (ws://192.168.x.x:8080/ar)"
-            android:inputType="textUri"
-            android:maxLines="1"
-            android:textColor="@color/viewer_text"
-            android:textColorHint="#B3FFFFFF" />
-
-        <EditText
-            android:id="@+id/session_id"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:hint="Session ID"
-            android:inputType="text"
-            android:maxLines="1"
-            android:text="demo-button-led"
-            android:textColor="@color/viewer_text"
-            android:textColorHint="#B3FFFFFF" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/connect_button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Connect" />
-
-            <Button
-                android:id="@+id/calibrate_button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:enabled="false"
-                android:text="Calibrate" />
-
-            <Button
-                android:id="@+id/reset_button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:enabled="false"
-                android:text="Reset" />
-        </LinearLayout>
+    android:id="@+id/app_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#F7F7EF">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center_vertical" android:paddingHorizontal="24dp">
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="@string/ui_circuit" android:textSize="25sp" android:textStyle="bold" android:letterSpacing="-0.04" android:textColor="#183F31"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/settings_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="48dp" android:text="@string/ui_settings"/>
     </LinearLayout>
-
+    <TextView android:id="@+id/progress_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="24dp" android:paddingBottom="12dp" android:text="@string/ui_01_design_02_review_03_ar" android:textColor="#617365" android:textSize="11sp" android:letterSpacing="0.08"/>
+    <ScrollView android:id="@+id/content_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="24dp" android:paddingBottom="24dp">
+            <LinearLayout android:id="@+id/design_panel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="@string/ui_an_idea_na_circuit_nbuilt_by_you" android:textSize="42sp" android:lineSpacingExtra="-3dp" android:letterSpacing="-0.05" android:textColor="#183F31" android:textStyle="bold"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/ui_describe_what_you_want_to_make_review_the_wiring_then_place_it_be" android:textColor="#617365" android:textSize="16sp" android:lineSpacingExtra="4dp"/>
+                <com.google.android.material.textfield.TextInputLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:hint="@string/ui_what_do_you_want_to_build">
+                    <com.google.android.material.textfield.TextInputEditText android:id="@+id/prompt_input" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textMultiLine|textCapSentences" android:gravity="top" android:minLines="3" android:maxLines="5" android:maxLength="2000" android:textSize="16sp"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/generate_button" android:layout_width="match_parent" android:layout_height="58dp" android:layout_marginTop="12dp" android:text="@string/ui_generate_circuit" android:textSize="16sp"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="@string/ui_start_with_an_idea" android:textSize="11sp" android:textColor="#617365" android:letterSpacing="0.1"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/example_led" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="@string/ui_light_a_red_led" android:gravity="start|center_vertical"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/example_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="@string/ui_turn_on_an_led_with_a_button" android:gravity="start|center_vertical"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/example_uno" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="@string/ui_blink_an_led_with_an_arduino_uno" android:gravity="start|center_vertical"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/demo_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/ui_explore_a_saved_example_offline"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/return_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/ui_return_to_your_circuit" android:visibility="gone"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/review_panel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:id="@+id/circuit_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:textSize="30sp" android:textStyle="bold" android:letterSpacing="-0.03" android:textColor="#183F31"/>
+                <TextView android:id="@+id/circuit_summary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textSize="14sp" android:textColor="#617365"/>
+                <com.htn.breadboardar.ui.BreadboardView android:id="@+id/breadboard_view" android:layout_width="match_parent" android:layout_height="400dp" android:layout_marginTop="20dp"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="@string/ui_pinch_to_zoom_drag_to_explore" android:textColor="#617365" android:textSize="12sp"/>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/fit_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="48dp" android:text="@string/ui_fit"/>
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/show_ar_button" android:layout_width="match_parent" android:layout_height="58dp" android:text="@string/ui_show_beside_my_board" android:textSize="16sp"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/ui_keep_power_disconnected_while_assembling_this_is_a_wiring_guide_c" android:textSize="12sp" android:textColor="#7C6848" android:lineSpacingExtra="3dp"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:text="@string/ui_your_parts" android:textSize="21sp" android:textStyle="bold" android:textColor="#183F31"/>
+                <TextView android:id="@+id/parts_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="#435C4B" android:textSize="14sp" android:lineSpacingExtra="6dp"/>
+                <TextView android:id="@+id/step_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:textSize="21sp" android:textStyle="bold" android:textColor="#183F31"/>
+                <TextView android:id="@+id/step_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="#435C4B" android:textSize="15sp" android:lineSpacingExtra="5dp" android:textIsSelectable="true"/>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/previous_step" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="52dp" android:text="@string/ui_previous"/>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/next_step" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="52dp" android:layout_marginStart="12dp" android:text="@string/ui_next"/>
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/firmware_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:text="@string/ui_view_arduino_code" android:visibility="gone"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/new_circuit_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="12dp" android:text="@string/ui_design_another_circuit"/>
+            </LinearLayout>
+            <TextView android:id="@+id/circuit_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" android:textColor="#7C493B" android:textSize="14sp" android:lineSpacingExtra="4dp"/>
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>
-

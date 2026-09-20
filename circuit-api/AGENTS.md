@@ -23,8 +23,16 @@ git diff --check
 
 Optional browser check: install Playwright separately and run `BROWSER_EXECUTABLE=/path/to/chromium python tests/browser_check.py`. It uses isolated temporary sessions and no paid provider calls. Browser outputs are `/tmp/circuit-desktop.png`, `/tmp/circuit-full-board.png`, `/tmp/circuit-mobile.png`.
 
-Export regenerates schemas/fixture pairs and the ignored `handoff/board-hole-map.meters.json` plus `handoff/circuit-api-to-unity.zip`. ZIP includes this context, both Unity docs, placement schema, all three placement fixtures, board map and supplied board assets. Never package `.env`, credentials, runtime sessions, virtual environments or agent logs. Generated files must match code. A local ZIP is not proof it was sent.
+Export regenerates schemas/fixture pairs and the ignored `handoff/board-hole-map.meters.json` plus `handoff/circuit-api-to-unity.zip`. ZIP includes this context, both Unity docs, placement schema, all three placement fixtures, board map, supplied board assets and the `unity/` C# importer. Never package `.env`, credentials, runtime sessions, virtual environments or agent logs. Generated files must match code. A local ZIP is not proof it was sent.
 
 ## Still requires hardware / Unity acceptance
 
-Check actual A1/J1/A63 and both rail-side mesh alignment, rail offsets/group gaps/continuity, switch spacing/internal pairs, component pin geometry, positive-height calibration sign, Uno anchors and firmware upload. Local tests do not verify physical fit or XR. This task does not modify the Unity renderer or Android transport.
+Check actual A1/J1/A63 and both rail-side mesh alignment, rail offsets/group gaps/continuity, switch spacing/internal pairs, component pin geometry, positive-height calibration sign, Uno anchors and firmware upload. Local tests do not verify physical fit or XR. The Android-first migration now modifies the native app and tracked `../unity/` renderer. Unity editor export and device acceptance remain pending license activation.
+
+## Android-first integration (current)
+
+- Product flow is native Android prompt → schematic → embedded on-device Unity AR. The former Kotlin camera/PNG WebSocket client was removed.
+- Keep Python generation/electrical validation server-side. Vercel is stateless and never writes session files; Android saves the response. The website and mock-server are optional reference tools, excluded from deployment.
+- Importer source is `../unity/Assets/CircuitXR/Runtime/`; export reads it from there. After exporting, run `python ../scripts/sync-mobile-assets.py` to synchronize native/Unity assets.
+- Preserve the team's prefab/FBX/material bytes in `../unity/Assets`. Current models are schematic artwork with exact generated hole/lead guides; the button's anchors are incomplete and the Uno is a proxy. Do not claim measured prefab fit.
+- Unity AR Foundation supplies Unity coordinates directly. Do not apply the legacy Kotlin calibration reflection. Device flow is A1/J1/A63 on a flat board, anchored beside-board rendering.

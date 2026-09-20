@@ -3,7 +3,7 @@ import re
 from collections import Counter
 from jsonschema import Draft202012Validator
 from . import contracts
-from .board import HOLES, MODEL
+from .board import HOLES, MODEL, default_inventory
 
 
 class CircuitError(Exception):
@@ -33,6 +33,15 @@ PINS = {"power_supply": {"positive", "negative"}, "led": {"anode", "cathode"},
         "resistor": {"a", "b"}, "button": {"a1", "a2", "b1", "b2"}}
 # Terminals a component definition joins internally, independent of the board model.
 INTERNAL_JOINS = {"button": (("a1", "a2"), ("b1", "b2"))}
+
+
+def normalize_request(request):
+    """Prompt-only requests (the Android contract) fall back to the default kit, board and session."""
+    filled = dict(request)
+    filled.setdefault("availableParts", default_inventory())
+    filled.setdefault("breadboardModel", MODEL)
+    filled.setdefault("sessionId", "android")
+    return filled
 
 
 def validate_request(request):

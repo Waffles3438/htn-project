@@ -1,3 +1,5 @@
+> Current integration update (unsent): the mobile renderer is now tracked at `../unity/`, with AR Foundation and Unity-as-a-Library export scripts. The older laptop polling/streaming notes below are historical. Full Unity export and Android assembly pass; physical-device validation remains. Team model bytes are preserved; current pin guides are schematic, with exact circuit-map coordinates.
+
 # Message for the Unity teammate
 
 Draft for sharing; not yet sent. Refresh `handoff/circuit-api-to-unity.zip` with `python -m circuit.export` before attaching it.
@@ -16,6 +18,7 @@ Our circuit API now takes a prompt, identifies the required components, assigns 
 - `board-hole-map.meters.json`: the versioned 830-hole runtime map in meters, with the coordinate frame and calibration references.
 - `reference/assets/breadboard.fbx`: supplied breadboard model; its embedded scale/rotation still need normalization.
 - `schemas/placement.schema.json` and `UNITY_HANDOFF.md`: exact field definitions and rendering/alignment notes.
+- `unity/*.cs`: optional drop-in importer (typed v3 models, board-map/GridMapper resolvers, prefab catalog, `CircuitBuilder.Build()` entry point). Adapt freely; keep your existing anchoring authoritative.
 
 **Proposed rendering agreement — please confirm or flag what your renderer already does differently**
 

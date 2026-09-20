@@ -1,3 +1,5 @@
+> Historical laptop-streaming protocol. The Android app now embeds Unity and does not use this transport. See [current architecture](README.md) and [Unity runtime](unity/README.md).
+
 # Android ↔ laptop overlay protocol
 
 Transport: one local-network WebSocket per phone. The Android viewer connects to the URL entered in the app, for example `ws://192.168.1.42:8080/ar`.

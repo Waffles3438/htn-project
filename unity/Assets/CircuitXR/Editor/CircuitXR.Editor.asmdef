@@ -1,0 +1,17 @@
+{
+  "name": "CircuitXR.Editor",
+  "references": [
+    "CircuitXR.Runtime",
+    "Unity.XR.ARFoundation",
+    "Unity.XR.ARSubsystems",
+    "Unity.XR.CoreUtils",
+    "Unity.InputSystem",
+    "Unity.XR.Management",
+    "Unity.XR.Management.Editor",
+    "Unity.XR.ARCore.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}

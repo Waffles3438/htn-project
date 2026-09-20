@@ -56,3 +56,6 @@ class ExportTests(unittest.TestCase):
                         for member in net["members"]:
                             self.assertIn(member, set(terminals) | device_pins)
                 self.assertIsNone(archive.testzip())
+                for name in ("unity/CircuitDefinition.cs", "unity/CircuitBoardMap.cs",
+                             "unity/CircuitPrefabCatalog.cs", "unity/CircuitBuilder.cs"):
+                    self.assertIn("namespace CircuitXR", archive.read(name).decode())

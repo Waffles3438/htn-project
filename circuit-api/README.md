@@ -1,138 +1,73 @@
-# Circuit API — Person 1
+# Circuit API
 
-Your independent folder for **prompt → required components → breadboard holes → validated Unity placement JSON**. Python backend and a small browser control page; no Node, Unity, Android, database, or hosting setup required.
+Small hosted generation and electrical-validation service for the Android app. The phone renders a native breadboard preview and hands the same semantic JSON to its embedded Unity renderer. No browser, laptop renderer, polling, database, or Python runtime on the phone is required.
 
-The board, kit, and LED asset metadata are imported from [`person2`](https://github.com/Waffles3438/htn-project/tree/person2/person2/data), pinned at commit `9d81633c65a42059bfc6307aa8fd0ec1554cd114`. The original files are preserved under `reference/person2/` so this folder runs independently of that unmerged branch.
+## Host on Vercel
 
-## Start
+Set the Vercel project's root directory to **`circuit-api`**, use **Other** as the framework preset, and leave the build/output commands unset. The Python entry is `api/index.py`; `vercel.json` routes `/api/*` to the WSGI app with a 180-second budget for two provider requests. `.vercelignore` excludes `web/`, `static/`, fixtures, handoffs and local data. No npm build is required.
 
-Python 3.9+:
+Configure either `OPENROUTER_API_KEY` or `OPENAI_API_KEY` in the host's environment, optionally `CIRCUIT_PROVIDER`, `OPENROUTER_MODEL` or `OPENAI_MODEL`. Never put the provider key into an Android Gradle property. `ALLOWED_ORIGIN` is only needed for a separate browser client. The native Android client sends no Origin header.
 
 ```sh
 cd circuit-api
+vercel deploy
+# After deployment:
+curl -fsS https://YOUR-DEPLOYMENT/api/health
+curl -fsS https://YOUR-DEPLOYMENT/api/circuits/demo/led \
+  -H 'Content-Type: application/json' -d '{}'
+```
+
+Save that HTTPS origin in the Android app's Settings, or build with `-PcircuitApiUrl=https://YOUR-DEPLOYMENT`. This repository is configured for hosting; no deployment URL has been provisioned as part of this change. For an internet-facing paid generation endpoint, configure the host's access/rate controls to suit the demo or intended users; CORS and the process-local BUSY lock are not authentication or a global quota.
+
+On Vercel (`VERCEL` set), circuit responses are **stateless**: there are no disk writes and session polling returns 404. Android persists the last valid response itself. This avoids depending on temporary files being available across serverless instances.
+
+## Run locally
+
+```sh
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-[ -f .env ] || cp .env.example .env
-python server.py
+.venv/bin/pip install -r requirements.txt
+# Configure .env locally from .env.example; keep it out of source control.
+.venv/bin/python server.py
 ```
 
-Open **http://127.0.0.1:8000**. Use **Button + LED** under **Ready-made circuits** immediately, without an API key. The venv and dependencies are already installed on the current laptop.
+`server.py` serves the optional React reference build (`web/dist`) or legacy `static` page alongside the same API router. `HOST=0.0.0.0` makes it reachable from your LAN. A debug Android emulator can use `http://10.0.2.2:8000`; a physical phone needs the computer's LAN address. Release builds accept HTTPS only. The optional website and old mock server are not required for Android or Vercel.
 
-For live generation through OpenRouter, set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL=openai/gpt-4.1-mini` in `.env`, then restart the server. `CIRCUIT_PROVIDER=auto` selects OpenRouter when its key is present; you can also set it explicitly to `openrouter` or `openai`. Direct OpenAI remains supported through `OPENAI_API_KEY` and `OPENAI_MODEL`. Keys stay server-side and `.env` is Git-ignored. Keep real keys out of `.env.example`. No key is bundled. The fixture is **only** used via an explicitly selected demo endpoint: failed live calls never silently become canned circuits.
+## Contract
 
-For a Unity laptop on the same Wi-Fi, set `HOST=0.0.0.0` and restart, then use `http://<API-laptop-IP>:8000`. This is a local hackathon server without authentication; keep it on the demo network. It does not use the Android mock server's port 8080.
+`POST /api/circuits/generate` accepts `{"prompt":"Turn on a red LED"}`. Android also supplies a unique request/session ID so it can reject a mismatched response. The full inventory/board request remains supported for the reference web UI.
 
-## What is implemented
+The response is placement **version 3**, directly, with:
 
-1. Validate prompt, inventory and `demo_breadboard_v1` selection.
-2. Call the configured provider with a strict parts schema to identify required components and intent.
-3. Reject missing inventory or unsupported circuits.
-4. Ask the model to design the directed series connection order and choose a starting row/column. A deterministic placement engine expands the generated design into fixed component footprints and allocates distinct vacant wire endpoints on the reference board. It does not retrieve a predefined circuit layout.
-5. Independently validate schema, inventory, unique hole occupancy, footprints, build order and electrical connectivity in both button states.
-6. Assemble the semantic placement: component mounts mapped to board addresses (`BB1:A15`), jumper endpoint pairs, and named electrical nets. The model never invents coordinates, asset IDs, validation results or assembly instructions; renderers derive coordinates from the checked-in hole map.
-7. Export `placement.json` and atomically save the last valid circuit per session. Unity can poll that session's endpoint.
+- `components[].mount.terminals`: stable terminal names to `BB1:A15` or rail-hole addresses.
+- `jumperWires[]`: semantic `from` / `to`, color and build step.
+- `externalDevices[]`: Uno side/mount; the renderer chooses its schematic pose.
+- `nets[]`, `requiredParts[]`, ordered `instructions[]`, and optional Uno `firmware`.
+- `breadboard.model`, `holeMapVersion`, `physicalVerified`, and explicit `validation.valid`.
 
-Scope: one 5 V source, one red LED, one 220 Ω resistor, jumpers, and optionally a momentary button. The existing Arduino path also supports an Uno R3 driving the external LED from D13/GND, steady or blinking one second high/one second low (external controller mount with firmware; no separate supply or button). Placements are version 3: semantic mounts, endpoint wires and named nets, with no coordinates. Latching, motors, multiple LEDs and other values are rejected. This is a limited electrical graph validator, not a general simulator or physical inspection system. Prompt interpretation is model-based. The button-LED path passed a prior live OpenRouter check; additional prompts need evaluation.
+No XYZ coordinates are generated by the model. `circuit/board.py` remains the geometry authority. The 830-hole map uses meters, A1 as origin, +X toward J1, +Z toward A63, +Y above the board. `physicalVerified=false` remains intentional.
 
-OpenRouter uses its [Structured Outputs API](https://openrouter.ai/docs/guides/features/structured-outputs), `response_format.json_schema`, and `provider.require_parameters=true`. Direct OpenAI integration follows the official [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs): `POST /v1/responses`, `text.format.type=json_schema`, `strict=true`, and `additionalProperties=false`. Refusals, incomplete output, invalid JSON and provider failures return errors without placement data.
+The supported kit is a red LED, 220 Ω resistor, optional momentary button and external 5 V source; Uno R3 steady/blinking LED circuits are also supported. Other controllers and arbitrary circuit types are rejected, not silently replaced with examples.
 
-## API
-
-| Method | Path | Result |
+| Method | Route | Purpose |
 |---|---|---|
-| GET | `/api/health` | Server status and whether a key is configured; never the key |
-| GET | `/api/kit` | Hardware owner's kit, with `jumper` normalized to `jumper_wire` |
-| GET | `/api/breadboards/demo_breadboard_v1` | All 830 hole positions in meters, conductivity groups, references and assumptions |
-| POST | `/api/circuits/analyze` | AI parts list only; does not publish a placement |
-| POST | `/api/circuits/generate` | Two-stage AI generation; returns the placement object directly |
-| POST | `/api/circuits/demo/button_led` | Explicit validated offline button lesson |
-| POST | `/api/circuits/demo/led` | Explicit validated offline always-on LED lesson |
-| POST | `/api/circuits/demo/arduino_led` | Uno external LED, external controller mount with firmware |
-| GET | `/api/sessions/{sessionId}/placement` | Last valid placement for that session, including after restart |
-| GET | `/api/schema/placement` | Unity handoff JSON Schema |
+| GET | `/api/health` | Provider configuration status, never secrets |
+| GET | `/api/kit` | Supported inventory |
+| GET | `/api/breadboards/demo_breadboard_v1` | Versioned board map |
+| GET | `/api/schema/placement` | Placement schema |
+| POST | `/api/circuits/generate` | Generate and validate a circuit |
+| POST | `/api/circuits/analyze` | Parts/intent analysis |
+| POST | `/api/circuits/demo/{led,button_led,arduino_led}` | Explicit saved lessons |
+| GET | `/api/sessions/{id}/placement` | Local development only; disabled on Vercel |
 
-Every POST accepts the same request shape:
+Errors are `{"error":{"code","message","details"}}` with no partial placement. Existing validation checks cover inventory, footprints, shared holes, shorts, LED polarity/current-limiting resistor, button connectivity and power-last build order.
 
-```json
-{
-  "prompt": "Turn on an LED when a button is pressed",
-  "availableParts": [
-    {"type": "power_supply", "value": "5V", "quantity": 1},
-    {"type": "led", "value": "red", "quantity": 1},
-    {"type": "resistor", "value": "220ohm", "quantity": 1},
-    {"type": "button", "value": "momentary", "quantity": 1},
-    {"type": "jumper_wire", "value": "male-male", "quantity": 10}
-  ],
-  "breadboardModel": "demo_breadboard_v1",
-  "sessionId": "demo-button-led"
-}
-```
-
-`jumper` is also accepted for compatibility with Person 2's original inventory. Supported value spelling variants include `5 V` and `220 Ω`. Quantities must be integers. Session IDs allow 1–64 letters, digits, `_` and `-`. Demo endpoints explicitly replace the request prompt with their named lesson and mark the result `source: "fixture"`.
+## Check and export
 
 ```sh
-# Offline end-to-end handoff:
-curl -fsS http://127.0.0.1:8000/api/circuits/demo/button_led \
-  -H 'Content-Type: application/json' \
-  --data-binary @fixtures/button_led.request.json > /tmp/placement.json
-
-# Live AI: same body, different endpoint, API key required.
-curl -fsS http://127.0.0.1:8000/api/circuits/generate \
-  -H 'Content-Type: application/json' \
-  --data-binary @fixtures/button_led.request.json
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m circuit.export
+cd ..
+python3 scripts/sync-mobile-assets.py
 ```
 
-Errors contain **only** `{ "error": { "code", "message", "details" } }`; there is no candidate placement. Examples: 400 malformed request, 422 missing parts/invalid circuit, 429 generation already running, 502 provider error, 503 missing key/network error. Generation is serialized. A failed request preserves the previous session file and the browser explicitly labels its retained preview as the last valid circuit. Persistence is local to `data/{sessionId}.placement.json`, ignored by Git.
-
-## Hand this to the Unity teammate
-
-- [UNITY_TEAM_MESSAGE.md](UNITY_TEAM_MESSAGE.md): a ready-to-send integration message and the details we need from the Unity owner.
-- [UNITY_HANDOFF.md](UNITY_HANDOFF.md): the semantic placement v3 contract, address grammar, derivation rules, asset requirements and Android calibration conversion.
-- [fixtures/button_led.placement.json](fixtures/button_led.placement.json): complete validated button lesson.
-- [fixtures/led.placement.json](fixtures/led.placement.json): complete always-on lesson.
-- [schemas/placement.schema.json](schemas/placement.schema.json): the contract.
-- [reference/assets/breadboard.fbx](reference/assets/breadboard.fbx): supplied breadboard mesh; import and alignment notes are in the Unity handoff.
-- Poll `GET /api/sessions/demo-button-led/placement` and keep the last successfully parsed, validated layout when the request fails.
-
-## Hardware data still to confirm
-
-The source supplies coordinates but no conductivity or footprint specifications. This implementation records these assumptions explicitly and sets `physicalVerified: false`:
-
-- A–E share a conductor per row, F–J share another. Rails with the same prefix (`L+A`, `L+B`, etc.) are joined within that segment; different segments are isolated.
-- The four-pin button spans E/F and three row intervals: 7.62 × 7.62 mm. Same-side `a1/a2` and `b1/b2` are internally joined. **Confirm against the actual switch or change the footprint rule before assembly.**
-- The raw board declares dimensions 165 × 10 × 55 mm, but its hole extents are X = −5.08…43.18 mm and Z = 0…157.48 mm. Terminal coordinates are preserved; modeled rail corrections change runtime X extents to −10.16…38.10 mm. Nominal dimensions are not used to place components or scale the board mesh.
-- Only LED asset metadata was uploaded; no GLB files are in that branch. Other prefab IDs and normalized pivots are specified in the handoff document, pending the assets owner.
-
-## Verification and GitHub
-
-### UI and rail update context
-
-The browser now uses direct task labels instead of hackathon/provider slogans, distinguishes ready-made circuits, and renders readable symmetric rails with matching marker sizes and uniform X/Z scale. Mobile scrolling stays within the board. Physical safety guidance remains visible; circuit checks do not certify hardware fit.
-
-Current map: `person2-9d81633+rails1`. All 630 terminal coordinates and component/asset names are unchanged; only 200 rail coordinates moved. This is a modeled correction, **not physical measurement**. See `UNITY_HANDOFF.md` for formulas, the placement v3 semantic contract, address grammar and migration. Old saved sessions (pre-v3) are rejected rather than rewritten; regenerate them. The browser refuses mismatched maps and old placement versions. Restart a running API to load new geometry or contracts.
-
-`python -m circuit.export` refreshes the schemas, three fixture pairs, `handoff/board-hole-map.meters.json`, and `handoff/circuit-api-to-unity.zip`. The ZIP contains docs/context, placement schema, all three placement fixtures, map and board assets; it excludes secrets and runtime data. Packaging does not send it to the teammate. `AGENTS.md` preserves the context for future agents.
-
-Optional real-browser regression check (install Playwright separately; it is not a runtime dependency):
-
-```sh
-BROWSER_EXECUTABLE="/path/to/chromium" python tests/browser_check.py
-```
-
-It starts an isolated server with temporary session storage and exercises all three circuits, focus, map geometry/cropping, export, saved/old sessions, failure preservation, parts-only rendering (mock provider response), and mobile scrolling. Screenshots are written to `/tmp/circuit-{desktop,full-board,mobile}.png`. No paid provider calls are made by this check.
-
-```sh
-python -m unittest discover -s tests -v
-python -m circuit.export
-```
-
-Tests cover schema failures, actual source-coordinate conversion, split rails, unsafe shorts including shorts only while pressed, reversed/unprotected LEDs, bypassed resistors/buttons, missing components/wires, HTTP responses, two-stage provider orchestration, and persistence across a failed generation/server restart. Unit-test provider calls are mocked. The button-LED design was also checked live through OpenRouter. Unity rendering and real hardware still require separate integration checks.
-
-The work is isolated on branch `feat/circuit-api` in the existing `Waffles3438/htn-project` repository. `.github/workflows/circuit-api.yml` runs tests and checks that exported schemas/fixtures stay in sync on GitHub. The Android code and mock server are unchanged. Keep further circuit work on this feature branch rather than `main`. The local `.env`, runtime data, virtual environment and generated handoff ZIP are ignored by Git.
-
-```sh
-git add circuit-api .github/workflows/circuit-api.yml
-git commit -m "Add prompt-to-breadboard circuit API and Unity contract"
-git push -u origin feat/circuit-api
-```
+`export` regenerates schemas, fixtures, the map and ignored `handoff/circuit-api-to-unity.zip`. It reads the importer from tracked `../unity/Assets/CircuitXR/Runtime`, not from a previous ZIP. Android and Unity consume synchronized copies of the generated map. See [Unity handoff](UNITY_HANDOFF.md), [Android build](../README.md), and [Unity project](../unity/README.md).

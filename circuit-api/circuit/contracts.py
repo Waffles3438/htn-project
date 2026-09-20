@@ -24,9 +24,13 @@ STEP = {"type": "integer", "minimum": 1, "maximum": 100}
 TYPE = string("power_supply", "led", "resistor", "button", "arduino_uno")
 PART = obj(type=string("power_supply", "led", "resistor", "button", "arduino_uno", "jumper_wire", "jumper"),
            value=string(), quantity={"type": "integer", "minimum": 0, "maximum": 30})
-REQUEST = obj(prompt={"type": "string", "minLength": 3, "maxLength": 1000},
-              availableParts=arr(PART, 1, 20), breadboardModel=string(),
-              sessionId={"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"})
+# Android contract: a bare {"prompt"} is valid; the backend fills the default kit,
+# the reference board and a shared session id before validation (see validation.normalize_request).
+REQUEST = {"type": "object",
+           "properties": {"prompt": {"type": "string", "minLength": 3, "maxLength": 1000},
+                          "availableParts": arr(PART, 1, 20), "breadboardModel": string(),
+                          "sessionId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"}},
+           "required": ["prompt"], "additionalProperties": False}
 PLAN_PART = obj(id=ID, type=TYPE, value=string(), purpose=string())
 PLAN = obj(title=string(), behavior=string("always_on", "while_pressed", "blink", "unsupported"),
            explanation=string(), components=arr(PLAN_PART, 0, 8))

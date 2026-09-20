@@ -1,0 +1,228 @@
+{
+  "version": 3,
+  "sessionId": "demo-button-led",
+  "breadboardModel": "demo_breadboard_v1",
+  "title": "Button-controlled LED",
+  "prompt": "Turn on an LED when a button is pressed",
+  "source": "fixture",
+  "generatedAt": "2026-09-19T00:00:00+00:00",
+  "breadboard": {
+    "model": "demo_breadboard_v1",
+    "holeMapVersion": "person2-9d81633+rails1",
+    "physicalVerified": false
+  },
+  "requiredParts": [
+    {
+      "type": "power_supply",
+      "value": "5V",
+      "quantity": 1
+    },
+    {
+      "type": "led",
+      "value": "red",
+      "quantity": 1
+    },
+    {
+      "type": "resistor",
+      "value": "220ohm",
+      "quantity": 1
+    },
+    {
+      "type": "button",
+      "value": "momentary",
+      "quantity": 1
+    },
+    {
+      "type": "jumper_wire",
+      "value": "male-male",
+      "quantity": 3
+    }
+  ],
+  "components": [
+    {
+      "id": "led_1",
+      "type": "led",
+      "value": "red",
+      "assetId": "led_red_v1",
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "anode": "BB1:A15",
+          "cathode": "BB1:A16"
+        }
+      },
+      "buildStep": 1
+    },
+    {
+      "id": "resistor_1",
+      "type": "resistor",
+      "value": "220ohm",
+      "assetId": "resistor_220ohm_v1",
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "a": "BB1:B12",
+          "b": "BB1:B15"
+        }
+      },
+      "buildStep": 2
+    },
+    {
+      "id": "button_1",
+      "type": "button",
+      "value": "momentary",
+      "assetId": "button_momentary_v1",
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "a1": "BB1:E8",
+          "b1": "BB1:F8",
+          "a2": "BB1:E11",
+          "b2": "BB1:F11"
+        }
+      },
+      "buildStep": 3
+    },
+    {
+      "id": "power_1",
+      "type": "power_supply",
+      "value": "5V",
+      "assetId": "power_supply_5v_v1",
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "positive": "BB1:J1",
+          "negative": "BB1:J2"
+        }
+      },
+      "buildStep": 7
+    }
+  ],
+  "jumperWires": [
+    {
+      "id": "wire_1",
+      "from": "BB1:I1",
+      "to": "BB1:D8",
+      "color": "red",
+      "buildStep": 4
+    },
+    {
+      "id": "wire_2",
+      "from": "BB1:G8",
+      "to": "BB1:C12",
+      "color": "yellow",
+      "buildStep": 5
+    },
+    {
+      "id": "wire_3",
+      "from": "BB1:C16",
+      "to": "BB1:I2",
+      "color": "black",
+      "buildStep": 6
+    }
+  ],
+  "nets": [
+    {
+      "id": "VCC",
+      "members": [
+        "button_1:a1",
+        "button_1:a2",
+        "power_1:positive"
+      ]
+    },
+    {
+      "id": "BUTTON_SIGNAL",
+      "members": [
+        "button_1:b1",
+        "button_1:b2",
+        "resistor_1:a"
+      ]
+    },
+    {
+      "id": "LED_SIGNAL",
+      "members": [
+        "led_1:anode",
+        "resistor_1:b"
+      ]
+    },
+    {
+      "id": "GND",
+      "members": [
+        "led_1:cathode",
+        "power_1:negative"
+      ]
+    }
+  ],
+  "validation": {
+    "valid": true,
+    "checks": [
+      "schema",
+      "inventory",
+      "known_holes",
+      "unique_leads",
+      "reference_footprints",
+      "power_connected_last",
+      "no_supply_short_in_either_button_state",
+      "forward_led_with_series_220ohm",
+      "requested_button_behavior"
+    ],
+    "warnings": [
+      "Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric layout, not measured hardware (rails 3 pitches outside A and J, 5-hole groups spanning rows 3-61), because the source rails were asymmetric; see UNITY_HANDOFF.md. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs."
+    ]
+  },
+  "instructions": [
+    {
+      "step": 1,
+      "componentIds": [
+        "led_1"
+      ],
+      "text": "With power disconnected, place led (red): anode (+, long lead) \u2192 A15, cathode (\u2212, short lead) \u2192 A16. The long lead is normally the anode; verify the flat side/short lead is the cathode."
+    },
+    {
+      "step": 2,
+      "componentIds": [
+        "resistor_1"
+      ],
+      "text": "With power disconnected, place resistor (220ohm): lead A \u2192 B12, lead B \u2192 B15."
+    },
+    {
+      "step": 3,
+      "componentIds": [
+        "button_1"
+      ],
+      "text": "With power disconnected, place button (momentary): A1 \u2192 E8, B1 \u2192 F8, A2 \u2192 E11, B2 \u2192 F11. Verify a1/a2 and b1/b2 are the internally connected pin pairs."
+    },
+    {
+      "step": 4,
+      "componentIds": [
+        "wire_1"
+      ],
+      "text": "With power disconnected, connect the red jumper from I1 to D8."
+    },
+    {
+      "step": 5,
+      "componentIds": [
+        "wire_2"
+      ],
+      "text": "With power disconnected, connect the yellow jumper from G8 to C12."
+    },
+    {
+      "step": 6,
+      "componentIds": [
+        "wire_3"
+      ],
+      "text": "With power disconnected, connect the black jumper from C16 to I2."
+    },
+    {
+      "step": 7,
+      "componentIds": [
+        "power_1"
+      ],
+      "text": "After checking the full circuit, connect the external 5 V source last: +5V (+) \u2192 J1, GND (\u2212) \u2192 J2."
+    }
+  ]
+}

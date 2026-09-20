@@ -1,35 +1,60 @@
-# Breadboard AR Viewer (Android)
+# Circuit — Android + Unity AR
 
-Native Android companion app for the laptop-hosted Unity breadboard demo. It keeps the physical camera and calibration on the phone, then draws Unity-rendered transparent overlay frames over the ARCore camera preview.
+Type a circuit idea on the phone, review its breadboard schematic and assembly steps, then open the on-device Unity renderer. Align **A1 → J1 → A63** on a flat physical breadboard; the completed virtual breadboard appears beside it. The phone needs the internet for generation, but no laptop renderer, website, websocket, or manually entered session code.
 
-## What it does
+The full Unity-enabled Android APK builds successfully. The native designer is emulator-tested and five Unity EditMode tests pass. **Physical AR tracking and alignment still require an ARCore phone.** A debug build without `unity-export/` deliberately shows an “AR module needs to be built” message; release builds refuse to omit Unity. Do not mistake the designer preview for a tested AR release.
 
-1. Connects to the laptop over the same Wi-Fi network with a WebSocket.
-2. Starts an ARCore camera session and sends pose/intrinsics at 10 Hz after calibration.
-3. Guides the student through three-point breadboard calibration: origin, positive X reference, positive Y reference.
-4. Receives transparent PNG frames rendered by Unity and layers them over the live camera view.
-5. Lets the student reset calibration when the phone or breadboard moves.
+## Build on this Mac
 
-The models from Sketchfab remain in the Unity project on the laptop. The phone receives rendered overlay frames, not Blender or mesh files.
+Java 17, Android SDK/adb/emulator, Unity 6000.6.2f1, Android Build Support, and Unity Hub are installed under `../.android-tools/`. The install is local to this workspace, not `/Applications`. Unity Hub is `../.android-tools/Unity Hub.app`; the editor is `../.android-tools/Unity-6000.6.2f1/Unity.app`.
 
-## Run it
+1. The local editor is activated. On another machine, activate an eligible Unity license in Hub and add the matching editor.
+2. From this folder:
 
-1. Open this folder in Android Studio and let Gradle sync.
-2. If Android Studio does not find your Android SDK automatically, copy `local.properties.example` to `local.properties` and update `sdk.dir`.
-3. Connect an ARCore-capable Android device with USB debugging enabled.
-4. Run the `app` configuration once to install the debug APK. USB is only needed for installation/debugging; the final demo uses local Wi-Fi.
-5. Start the laptop signalling/overlay service.
-6. On the phone, enter `ws://<laptop-LAN-IP>:8080/ar` and a shared session ID, such as `demo-button-led`.
-7. Tap **Connect**, then **Calibrate**. Tap the same three physical board references agreed by the Unity team.
+```sh
+./scripts/build-android.sh         # Android APK + 8 contract tests + lint
+./scripts/test-unity.sh            # EditMode tests; requires activated editor
+./scripts/export-unity.sh          # Unity scene → library → complete Android debug APK
+```
 
-The demo manifest allows `ws://` over the local network. Use `wss://` and remove clear-text traffic for anything beyond a controlled demo.
+The APK is `app/build/outputs/apk/debug/app-debug.apk`. With a physical Android 8+ ARCore-capable phone and USB debugging:
 
-## Laptop contract
+```sh
+source scripts/android-env.sh
+adb devices
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
-See [PROTOCOL.md](PROTOCOL.md). Unity must use the camera pose, intrinsics, and calibration data to render the relevant components into a transparent PNG at the reported phone viewport size. Send each frame back with the `overlay_frame` message.
+Set a deployed API origin in the app's **Settings**, or bake it into a build with `-PcircuitApiUrl=https://your-service.vercel.app`. Debug builds accept a local HTTP origin such as `http://10.0.2.2:8000`; release builds require HTTPS. Offline examples are explicitly labeled and work without a backend or API key.
 
-## Project boundaries
+For another machine, install JDK 17, Android SDK 35 + build tools 36, NDK r27c (`27.2.12479018`), CMake 3.22.1, and the matching Unity editor with Android Build Support. Set `JAVA_HOME`, `ANDROID_HOME`, and `UNITY_EDITOR`, plus `sdk.dir` in local.properties if your IDE needs it. AGP 9.0/Gradle 9.1 matches the Unity version's generated build; Kotlin is provided by AGP.
 
-- This is the Android viewer only. It does not call the circuit-design API or import Sketchfab assets.
-- It intentionally does not use Unity Remote; Unity Remote is a development preview tool, not the final AR viewer.
-- Portrait orientation is fixed for the demo. Both the Android camera and Unity overlay must use the same orientation and viewport dimensions.
+## Why the Python API remains
+
+`circuit-api/` chooses parts with the model provider, derives hole assignments deterministically, and validates electrical connectivity before returning placement-v3 JSON. The model never invents XYZ positions. Keeping this small service avoids bundling a shared provider secret in the APK and duplicating the electrical validator in two languages. `server.py` is only the local-development host; Vercel runs `api/index.py` directly. There is no Python runtime on Android.
+
+See [API hosting](circuit-api/README.md). The Vercel bundle excludes the React website, legacy static page, development data and handoff assets. Existing `web/`, `static/`, `mock-server/` and `PROTOCOL.md` remain optional historical/reference tools; they are not Android runtime or deployment dependencies. The obsolete native camera/PNG streaming client was removed.
+
+## Unity integration
+
+[Unity project and export](unity/README.md) documents the AR scene, tracked importer, prefab provenance, calibration and device checks. Models and metadata from the team's Unity branch are preserved. Their geometry is reused as schematic artwork with exact generated lead guides; unmeasured prefab anchors are not treated as verified physical pins. The Uno is a labeled schematic proxy because the team branch has no Uno prefab.
+
+The native app atomically saves the last valid circuit. On AR entry it writes a private handoff file; `CircuitUnityActivity` exposes it through JNI. Unity runs in its own Android process, owns the camera, and returns to the designer without terminating it. Every entry loads the latest saved circuit. Unity validates every endpoint before replacing its generated root, and wires remain local to that root.
+
+## Checks and current acceptance
+
+```sh
+cd circuit-api
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m circuit.export
+cd ..
+python3 scripts/sync-mobile-assets.py
+./scripts/build-android.sh
+./scripts/test-unity.sh
+source scripts/android-env.sh
+./gradlew :app:connectedDebugAndroidTest  # running emulator or USB device
+```
+
+Verified here: 59 backend tests, 8 Android contract tests, 3 Android emulator flow tests, 5 Unity EditMode tests, full ARM64 Unity library export, embedded Android APK assembly and lint, and a Unity scene render with the bundled component meshes. The emulator reaches Unity’s explicit unsupported-AR screen with the reviewed circuit loaded. Physical camera tracking, calibration accuracy, and repeated AR entry/exit require acceptance on an ARCore phone. No hosted API deployment was created in this session. `physicalVerified=false` is intentional.
+
+The emulator network tests use a local fake provider response; they do not spend API credits. A real generation requires a configured provider on your deployed API. After installing, open **Settings**, enter that API origin, generate a circuit, review its steps, then choose **Show beside my board** and allow the camera. Follow the three labeled reference points.

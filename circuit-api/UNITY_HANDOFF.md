@@ -1,8 +1,8 @@
 # Circuit API → Unity
 
-Start by importing `fixtures/button_led.placement.json`. Then poll `http://<API-laptop-IP>:8000/api/sessions/demo-button-led/placement`. The POST generation response is the same placement object, without a wrapper.
+The Android app receives a validated placement directly from `POST /api/circuits/generate`, draws its schematic, and opens an embedded Unity activity with the same JSON. The renderer now lives in the tracked [`../unity/`](../unity/README.md) project. No session polling or laptop overlay stream is part of the phone flow.
 
-For the coordination message and information needed from the renderer owner, see [UNITY_TEAM_MESSAGE.md](UNITY_TEAM_MESSAGE.md). The API frame below is an implemented proposal; it has not yet been confirmed against the Unity project.
+**Current verification:** Full Unity ARM64 export and embedded Android APK assembly pass, along with 59 backend tests, 8 native contract tests, 3 Android emulator flow tests, and 5 Unity EditMode tests. The native schematic and rendered Unity artwork have been visually checked. Physical AR acceptance is still pending on an ARCore phone. A build made without a Unity export is explicitly a designer preview.
 
 ## First rendering check
 
@@ -34,7 +34,7 @@ Moving or rotating `BoardRoot` must keep all pin and wire endpoints attached to 
 
 ### Beside-board versus aligned-overlay mode
 
-Both modes use identical circuit JSON. A virtual board beside the physical one uses a user-selected root pose, optionally offset from the calibrated board pose. A direct overlay uses the calibrated pose without that offset. Apply this placement only at `BoardRoot`; do not bake a demonstration offset into component positions or modify the reference hole map. In overlay mode, the breadboard mesh may be hidden while component and hole guides remain visible. Confirm the intended demo mode with the team before integrating camera calibration.
+Both modes use identical circuit JSON. A virtual board beside the physical one uses a user-selected root pose, optionally offset from the calibrated board pose. A direct overlay uses the calibrated pose without that offset. Apply this placement only at `BoardRoot`; do not bake a demonstration offset into component positions or modify the reference hole map. In overlay mode, the breadboard mesh may be hidden while component and hole guides remain visible. The mobile implementation uses beside-board mode; aligned overlay remains a future measured calibration option.
 
 ## Placement v3 — semantic contract (2026-09-19)
 
@@ -53,6 +53,20 @@ Semantic address grammar — never coordinates:
 - `<componentId>:<terminalId>` for component terminals: `led_1:anode`, `resistor_1:b`, `mcu_1:D13`. Terminal ids are stable between the website and Unity.
 
 Only display a newly fetched layout when `version == 3`, `breadboardModel == "demo_breadboard_v1"`, `sessionId` matches the active session, and `validation.valid == true`. Match `breadboard.holeMapVersion` to the rendered map too. Reject other versions — the API itself rejects old saved sessions with `OUTDATED_PLACEMENT`. Preserve the previous circuit and compatible map after HTTP errors and while generating. `source` is `fixture`, `openai`, or `openrouter`; `generatedAt` changes when a new circuit is saved. A polling rate of 1 Hz is sufficient. Parsers should ignore unknown additive fields (Kotlin `ignoreUnknownKeys=true`).
+
+## Tracked mobile importer
+
+Source: `../unity/Assets/CircuitXR/Runtime/`. The handoff ZIP includes its portable circuit model, board-map resolver, prefab catalog and builder. The complete AR runtime, generated-scene editor command and Android export scripts are in `../unity/` and `../scripts/`.
+
+- `CircuitDefinition` requires version 3, the supported board, and an explicit successful validation result.
+- `BoardMapResolver` reads `{x,y,z}` position objects from the authoritative map and resolves strip and indexed rail addresses.
+- `CircuitBuilder` validates all terminal and wire endpoints before staging a replacement circuit. Every generated object and local-space wire belongs to BoardRoot. Failed imports preserve the previous root.
+- The team's LED/resistor/button meshes are preserved and uniformly normalized as **schematic artwork**, with separate exact hole markers and generated leads. No measured physical pin alignment is claimed. The button prefab has only three named anchors, not the four terminals required by the electrical contract.
+- The external Uno uses a labeled schematic proxy and display-only D13/GND positions; no Uno model exists in the team's branch. The breadboard is drawn from the map, while the source FBX remains preserved for later calibration.
+- `CircuitArController` owns horizontal-surface taps, ARAnchor placement, tracking-loss visibility, left/right placement and cumulative assembly steps. Unity alone owns the camera.
+- Legacy `GridMapperResolver` remains separately under `../unity/Assets/Scripts/` for the team's original scene. Its row/column vectors and indexed rail validation are corrected. The mobile AR scene uses the meter map, not the original scene's arbitrary world scale.
+
+Run `../scripts/export-unity.sh` from a licensed installation to create the library and build the native host. No model provider key enters this project or APK.
 
 ## Coordinates
 
@@ -107,19 +121,15 @@ part.transform.localRotation = Orientation(points[0], points[1]); // +X terminal
 // Resolve component.assetId to the normalized prefab wrapper above.
 ```
 
-Sort components and wires together by `buildStep`. The shared `instructions[]` contains matching IDs and user-facing text. Power connects last. This folder supplies JSON; it does not modify the Unity renderer, Android viewer, or WebSocket overlay transport.
+Sort components and wires together by `buildStep`. The shared `instructions[]` contains matching IDs and user-facing text. Power connects last. The tracked mobile project implements beside-board rendering. The notes above on normalized prefab pins describe the requirements for future measured mesh alignment, not a claim about the current schematic bodies.
 
-## Android calibration conversion
+## On-device Unity calibration
 
-The existing Android `PROTOCOL.md` describes a **right-handed** calibration frame with two in-plane axes. Tap **A1, then J1, then A63**, so Android's `boardFrame.xAxis` follows source +X and `boardFrame.yAxis` follows source +Z. Android computes its normal with a cross product; do not apply the placement XYZ directly to that frame.
+The app opens Unity as a Library; **AR Foundation supplies Unity-coordinate hit poses and camera tracking directly**. Tap A1 → J1 → A63 on a flat breadboard. `BoardCalibration` checks the 27.94 mm and 157.48 mm reference distances and an approximately right angle without stretching the map. It computes +X from A1→J1, +Z from A1→A63, and +Y from `cross(Z,X)`, rejecting an inverted normal.
 
-If `O`, `U`, `V`, `N` are Android's origin, xAxis, yAxis, zAxis, the ARCore-world point for this placement convention is:
+An ARAnchor stores that pose. BoardRoot is a child with an initial +X offset of 0.15 m, placing the virtual circuit beside the physical board. Side switching changes only this root offset. Reposition destroys the old anchor and requires three new taps. Keep the physical board still; this is spatial anchoring, not automatic object recognition.
 
-```text
-world_ARCore = O + x * U + z * V - y * N
-```
-
-Equivalently, convert board-local `(x,y,z)` to calibration coordinates `(x,z,-y)` first. This assumes the chosen physical A1/J1/A63 orientation gives the intended +Y above the board. Test it with a positive-height marker, and confirm the sign against the actual board before loading assets. Then apply your existing ARCore-right-handed → Unity-left-handed world conversion **once**, consistently to camera poses and board geometry. Do not apply the reflection twice or pass a reflection matrix to a quaternion constructor. Calibration/camera handling remains the Unity owner's responsibility.
+The former Kotlin ARCore camera and WebSocket/PNG client have been removed. Do **not** apply the legacy `(x,z,-y)` conversion or an additional ARCore-to-Unity reflection in this path. `../PROTOCOL.md` describes only the retired laptop-streaming experiment.
 
 ## Known source limitations
 
