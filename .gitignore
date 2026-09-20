@@ -1,6 +1,10 @@
 .gradle/
 .gradle-user-home/
+.android-user-home/
 .kotlin/
+.inspect-filament/
+.cxx/
+.externalNativeBuild/
 .idea/
 .venv/
 .backboard/
@@ -18,6 +22,7 @@ circuit-api/.backboard/
 circuit-api/.env
 circuit-api/data/
 
+<<<<<<< Updated upstream
 # Local Unity export and editor state
 unity-export/
 unity/Library/
@@ -25,3 +30,7 @@ unity/Temp/
 unity/Logs/
 unity/obj/
 unity/UserSettings/
+=======
+# Mock server local dependencies
+mock-server/node_modules/
+>>>>>>> Stashed changes
