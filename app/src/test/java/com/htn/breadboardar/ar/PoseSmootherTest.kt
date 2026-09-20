@@ -13,6 +13,15 @@ class PoseSmootherTest {
     private val smoother = PoseSmoother()
 
     @Test
+    fun `clear motion catches up ninety percent in one update`() {
+        val start = pose(0f, 0f, -0.5f, 0f)
+        val moved = pose(0.02f, 0f, -0.5f, 10f)
+        val filtered = smoother.smooth(start, moved)
+        assertEquals(0.018f, filtered.translation[0], 1e-6f)
+        assertTrue(angleBetween(filtered.quaternion, moved.quaternion) < degreesToRadians(1.1f))
+    }
+
+    @Test
     fun `holds sub-millimetre and sub-degree stationary noise`() {
         val previous = pose(0f, 0f, -0.5f, 0f)
         val fresh = pose(0.0007f, -0.0004f, -0.4997f, 0.2f)

@@ -22,7 +22,7 @@ internal class PoseSmoother(
     private val stillRotationRadians: Float = degreesToRadians(1.5f),
     private val movingRotationRadians: Float = degreesToRadians(6f),
     private val stationaryBlend: Float = 0.22f,
-    private val movingBlend: Float = 0.72f,
+    private val movingBlend: Float = 0.90f,
     private val translationDeadbandMeters: Float = 0.001f,
     private val rotationDeadbandRadians: Float = degreesToRadians(0.35f),
 ) {

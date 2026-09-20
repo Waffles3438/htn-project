@@ -896,7 +896,9 @@ class ArCameraPreview @JvmOverloads constructor(
         const val FILAMENT_FAR_M = 20f
         const val TRACKING_HINT_STABLE_NS = 1_000_000_000L // Ignore anything shorter than a second.
         const val TRACKING_HINT_MIN_VISIBLE_NS = 1_500_000_000L
-        const val VISUAL_TRACKING_INTERVAL_NS = 33_000_000L
+        // Allow each fresh frame on 60-Hz cameras. The single in-flight worker
+        // still applies backpressure: no stale camera frames are queued to process.
+        const val VISUAL_TRACKING_INTERVAL_NS = 16_000_000L
         const val RECTANGLE_INTERVAL_NS = 300_000_000L // Roughly three detections per second.
 
         /** A worse fit than this is not a rectangle we can trust a pose from. */
