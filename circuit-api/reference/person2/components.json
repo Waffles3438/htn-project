@@ -1,0 +1,29 @@
+{
+  "components": [
+    {
+      "type": "led",
+      "value": "red",
+      "quantity": 1
+    },
+    {
+      "type": "resistor",
+      "value": "220ohm",
+      "quantity": 1
+    },
+    {
+      "type": "button",
+      "value": "momentary",
+      "quantity": 1
+    },
+    {
+      "type": "jumper",
+      "value": "male-male",
+      "quantity": 10
+    },
+    {
+      "type": "power_supply",
+      "value": "5V",
+      "quantity": 1
+    }
+  ]
+}

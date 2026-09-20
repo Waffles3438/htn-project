@@ -1,0 +1,4 @@
+<linker>
+  <!-- Placement DTOs and the private board-map DTOs are populated through JSON reflection. -->
+  <assembly fullname="CircuitXR.Runtime" preserve="all" />
+</linker>

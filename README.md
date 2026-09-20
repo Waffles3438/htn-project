@@ -1,61 +1,60 @@
-# Breadboard AR Viewer (Android)
+# Circuit — designer + native Android AR
 
-This is the native Android AR viewer for the breadboard project. It detects the
-physical breadboard with the phone camera, places a transparent Filament-rendered
-GLB beside it, and keeps that model anchored while the phone moves.
+Type a circuit idea on the phone, review its breadboard schematic and assembly steps, then choose **Show beside my board**. That launches the bundled native ARCore viewer, which detects the physical breadboard and places a GLB instructional model next to it. The project no longer needs a laptop renderer, a WebSocket, or a Unity export for this path.
 
-It does **not** use Unity Remote or a WebSocket. The phone pulls a completed
-`.glb` file from the backend over normal HTTP(S).
+The Android app includes the circuit designer, the Python circuit API contract, and the native AR viewer. Physical alignment must still be verified on an ARCore-capable phone. The Unity project remains in the repository as an optional alternative renderer, not as the launcher's required AR module.
 
-## What it does
+## Build on this Mac
 
-1. Starts an ARCore camera session and detects the physical breadboard.
-2. Lets the learner tap the detected board rectangle to lock it.
-3. Draws the yellow board outline and a 3-D model beside the physical board.
-4. Lets the learner enter a direct HTTP(S) `.glb` URL and tap **Load GLB** to
-   replace the bundled demonstration model at runtime.
-5. Keeps the bundled `breadboard.glb` as an offline fallback if no backend model
-   has been loaded.
+Java 17, Android SDK/adb/emulator, Unity 6000.6.2f1, Android Build Support, and Unity Hub are installed under `../.android-tools/`. The install is local to this workspace, not `/Applications`. Unity Hub is `../.android-tools/Unity Hub.app`; the editor is `../.android-tools/Unity-6000.6.2f1/Unity.app`.
 
-## Run it
+1. The local editor is activated. On another machine, activate an eligible Unity license in Hub and add the matching editor.
+2. From this folder:
 
-1. Open this folder in Android Studio and let Gradle sync.
-2. Connect an ARCore-capable Android phone with USB debugging enabled and run the
-   `app` configuration.
-3. Start a backend that serves a self-contained `.glb` over HTTP(S).
-4. In the app, enter the direct model URL, for example
-   `http://192.168.1.42:8080/models/breadboard.glb`, then tap **Load GLB**.
-5. Tap **Calibrate**, point the phone at the physical breadboard, and tap its
-   detected rectangle.
-
-The phone must be able to reach the backend URL. Use your laptop's LAN IP for a
-normal Wi-Fi demo; `localhost` on the phone means the phone itself, not the laptop.
-The app currently permits local-network `http://` URLs for development. Use
-`https://` for any deployment outside a controlled demo network.
-
-## Quick local GLB server
-
-The included replacement mock server serves the bundled GLB with ordinary HTTP:
-
-```powershell
-cd mock-server
-npm start
+```sh
+./scripts/build-android.sh         # Android APK + circuit-contract tests
+./scripts/test-unity.sh            # Optional Unity EditMode tests
+./gradlew :app:assembleDebug        # Native designer + AR viewer APK
 ```
 
-Then enter `http://<laptop-LAN-IP>:8080/models/breadboard.glb` in the app. It is
-only a test server; your real backend should implement the contract below.
+The APK is `app/build/outputs/apk/debug/app-debug.apk`. With a physical Android 8+ ARCore-capable phone and USB debugging:
 
-## Backend contract
+```sh
+source scripts/android-env.sh
+adb devices
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
-See [PROTOCOL.md](PROTOCOL.md) for the exact HTTP request/response and model-axis
-contract to give the backend and 3-D asset teammates.
+Set a deployed API origin in the app's **Settings**, or bake it into a build with `-PcircuitApiUrl=https://your-service.vercel.app`. Debug builds accept a local HTTP origin such as `http://10.0.2.2:8000`; release builds require HTTPS. Offline examples are explicitly labeled and work without a backend or API key.
 
-## Project boundaries
+For another machine, install JDK 17, Android SDK 35 + build tools 36, NDK r27c (`27.2.12479018`), CMake 3.22.1, and the matching Unity editor with Android Build Support. Set `JAVA_HOME`, `ANDROID_HOME`, and `UNITY_EDITOR`, plus `sdk.dir` in local.properties if your IDE needs it. AGP 9.0/Gradle 9.1 matches the Unity version's generated build; Kotlin is provided by AGP.
 
-- The Android app does not call the circuit-design API itself. The backend creates
-  or chooses the finished scene GLB, then exposes it at a URL.
-- The downloaded GLB must be a binary glTF 2.0 file with all textures and buffers
-  embedded. External `.bin` or texture URLs are not supported.
-- The app currently treats a downloaded model as one breadboard-sized instructional
-  overlay placed north of the detected board. It is not yet a per-component,
-  per-breadboard-pin scene protocol.
+## Why the Python API remains
+
+`circuit-api/` chooses parts with the model provider, derives hole assignments deterministically, and validates electrical connectivity before returning placement-v3 JSON. The model never invents XYZ positions. Keeping this small service avoids bundling a shared provider secret in the APK and duplicating the electrical validator in two languages. `server.py` is only the local-development host; Vercel runs `api/index.py` directly. There is no Python runtime on Android.
+
+See [API hosting](circuit-api/README.md). The Vercel bundle excludes the React website, legacy static page, development data and handoff assets. Existing `web/`, `static/`, `mock-server/` and `PROTOCOL.md` remain optional historical/reference tools; they are not Android runtime or deployment dependencies. The obsolete native camera/PNG streaming client was removed.
+
+## Unity integration
+
+[Unity project and export](unity/README.md) documents the AR scene, tracked importer, prefab provenance, calibration and device checks. Models and metadata from the team's Unity branch are preserved. Their geometry is reused as schematic artwork with exact generated lead guides; unmeasured prefab anchors are not treated as verified physical pins. The Uno is a labeled schematic proxy because the team branch has no Uno prefab.
+
+The native app atomically saves the last valid circuit. On AR entry it writes the selected placement JSON to private app storage, then launches `ArViewerActivity`. The optional Unity handoff remains available for the Unity project, but it is not used by the native viewer launch path.
+
+## Checks and current acceptance
+
+```sh
+cd circuit-api
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m circuit.export
+cd ..
+python3 scripts/sync-mobile-assets.py
+./scripts/build-android.sh
+./scripts/test-unity.sh
+source scripts/android-env.sh
+./gradlew :app:connectedDebugAndroidTest  # running emulator or USB device
+```
+
+Verified here: 59 backend tests, 8 Android contract tests, 3 Android emulator flow tests, 5 Unity EditMode tests, full ARM64 Unity library export, embedded Android APK assembly and lint, and a Unity scene render with the bundled component meshes. The emulator reaches Unity’s explicit unsupported-AR screen with the reviewed circuit loaded. Physical camera tracking, calibration accuracy, and repeated AR entry/exit require acceptance on an ARCore phone. No hosted API deployment was created in this session. `physicalVerified=false` is intentional.
+
+The emulator network tests use a local fake provider response; they do not spend API credits. A real generation requires a configured provider on your deployed API. After installing, open **Settings**, enter that API origin, generate a circuit, review its steps, then choose **Show beside my board** and allow the camera. In the viewer, load the generated self-contained GLB URL and calibrate the physical breadboard.

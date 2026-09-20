@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "breadboardModel": "demo_breadboard_v1",
+  "components": [
+    {
+      "id": "led_1",
+      "type": "led",
+      "value": "red",
+      "assetId": "led_red_v1",
+      "terminals": [
+        {
+          "id": "anode",
+          "holeId": "E10"
+        },
+        {
+          "id": "cathode",
+          "holeId": "E11"
+        }
+      ],
+      "buildStep": 1
+    }
+  ],
+  "jumperWires": [
+    {
+      "id": "wire_1",
+      "fromHole": "E15",
+      "toHole": "J15",
+      "color": "red",
+      "buildStep": 2
+    }
+  ]
+}

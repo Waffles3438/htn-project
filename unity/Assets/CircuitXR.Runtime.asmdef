@@ -1,0 +1,10 @@
+{
+  "name": "CircuitXR.Runtime",
+  "references": [
+    "Unity.XR.ARFoundation",
+    "Unity.XR.ARSubsystems",
+    "Unity.XR.CoreUtils",
+    "Unity.InputSystem"
+  ],
+  "autoReferenced": true
+}

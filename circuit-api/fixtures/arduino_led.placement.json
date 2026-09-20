@@ -1,0 +1,187 @@
+{
+  "version": 3,
+  "sessionId": "demo-button-led",
+  "breadboardModel": "demo_breadboard_v1",
+  "title": "Arduino Uno \u00b7 blinking LED",
+  "prompt": "Blink an external red LED every second using an Arduino Uno R3",
+  "source": "fixture",
+  "generatedAt": "2026-09-19T00:00:00+00:00",
+  "breadboard": {
+    "model": "demo_breadboard_v1",
+    "holeMapVersion": "person2-9d81633+rails1",
+    "physicalVerified": false
+  },
+  "requiredParts": [
+    {
+      "type": "arduino_uno",
+      "value": "Uno R3",
+      "quantity": 1
+    },
+    {
+      "type": "led",
+      "value": "red",
+      "quantity": 1
+    },
+    {
+      "type": "resistor",
+      "value": "220ohm",
+      "quantity": 1
+    },
+    {
+      "type": "jumper_wire",
+      "value": "male-male",
+      "quantity": 4
+    }
+  ],
+  "components": [
+    {
+      "id": "led_1",
+      "type": "led",
+      "value": "red",
+      "assetId": "led_red_v1",
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "anode": "BB1:A15",
+          "cathode": "BB1:A16"
+        }
+      },
+      "buildStep": 1
+    },
+    {
+      "id": "resistor_1",
+      "type": "resistor",
+      "value": "220ohm",
+      "assetId": "resistor_220ohm_v1",
+      "mount": {
+        "type": "breadboard",
+        "board": "BB1",
+        "terminals": {
+          "a": "BB1:B12",
+          "b": "BB1:B15"
+        }
+      },
+      "buildStep": 2
+    }
+  ],
+  "jumperWires": [
+    {
+      "id": "wire_1",
+      "from": "mcu_1:D13",
+      "to": "BB1:C12",
+      "color": "red",
+      "buildStep": 3
+    },
+    {
+      "id": "wire_3",
+      "from": "BB1:C16",
+      "to": "mcu_1:GND",
+      "color": "black",
+      "buildStep": 4
+    }
+  ],
+  "nets": [
+    {
+      "id": "LED_SIGNAL",
+      "members": [
+        "led_1:anode",
+        "resistor_1:b"
+      ]
+    },
+    {
+      "id": "GND",
+      "members": [
+        "led_1:cathode",
+        "mcu_1:GND"
+      ]
+    },
+    {
+      "id": "SIGNAL_1",
+      "members": [
+        "mcu_1:D13",
+        "resistor_1:a"
+      ]
+    }
+  ],
+  "validation": {
+    "valid": true,
+    "checks": [
+      "schema",
+      "inventory",
+      "known_holes",
+      "unique_leads",
+      "reference_footprints",
+      "power_connected_last",
+      "no_supply_short_in_either_button_state",
+      "forward_led_with_series_220ohm",
+      "requested_button_behavior",
+      "uno_d13_high_series_path",
+      "uno_d13_low_no_external_supply",
+      "external_lead_inventory"
+    ],
+    "warnings": [
+      "Terminal-strip geometry comes from person2 commit 9d81633. Power rail holes use a modeled symmetric layout, not measured hardware (rails 3 pitches outside A and J, 5-hole groups spanning rows 3-61), because the source rails were asymmetric; see UNITY_HANDOFF.md. Electrical strip connectivity and the button's 7.62 mm square footprint/pin pairing still need physical confirmation. The source dimensions do not agree with its hole extents; hole coordinates are authoritative for placement. Only LED asset metadata is supplied; other asset IDs require normalized Unity prefabs.",
+      "Uno R3 only: D13 drives one red LED through 220 ohm. Unity derives the Uno pose from its external mount plus measured pin anchors. Firmware has not been uploaded to physical hardware."
+    ]
+  },
+  "instructions": [
+    {
+      "step": 1,
+      "componentIds": [
+        "led_1"
+      ],
+      "text": "With power disconnected, place led (red): anode (+, long lead) \u2192 A15, cathode (\u2212, short lead) \u2192 A16. The long lead is normally the anode; verify the flat side/short lead is the cathode."
+    },
+    {
+      "step": 2,
+      "componentIds": [
+        "resistor_1"
+      ],
+      "text": "With power disconnected, place resistor (220ohm): lead A \u2192 B12, lead B \u2192 B15."
+    },
+    {
+      "step": 3,
+      "componentIds": [
+        "wire_1"
+      ],
+      "text": "With power disconnected, connect the red jumper from I1 to C12."
+    },
+    {
+      "step": 4,
+      "componentIds": [
+        "wire_3"
+      ],
+      "text": "With power disconnected, connect the black jumper from C16 to I2."
+    },
+    {
+      "step": 5,
+      "componentIds": [
+        "mcu_1",
+        "wire_1",
+        "wire_3"
+      ],
+      "text": "With USB disconnected, connect Uno D13 \u2192 I1, GND \u2192 I2. Check wiring, then connect USB and upload circuit.ino."
+    }
+  ],
+  "externalDevices": [
+    {
+      "id": "mcu_1",
+      "type": "arduino_uno",
+      "model": "uno_r3",
+      "assetId": "arduino_uno_r3_v1",
+      "mount": {
+        "type": "external",
+        "relativeTo": "BB1",
+        "side": "left"
+      }
+    }
+  ],
+  "firmware": {
+    "filename": "circuit.ino",
+    "board": "Arduino Uno R3",
+    "language": "arduino",
+    "code": "const int LED_PIN = 13;\n\nvoid setup() {\n  pinMode(LED_PIN, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(LED_PIN, HIGH);\n  delay(1000);\n  digitalWrite(LED_PIN, LOW);\n  delay(1000);\n}\n",
+    "uploadInstructions": "Select Arduino Uno and its USB port in Arduino IDE. Wire with USB disconnected; check polarity, then connect USB and upload circuit.ino. No separate 5 V supply is used."
+  }
+}

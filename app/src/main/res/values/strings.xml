@@ -1,6 +1,28 @@
 <resources>
-    <string name="app_name">Breadboard AR Viewer</string>
+    <string name="app_name">Circuit</string>
     <string name="camera_permission_required">Camera permission is required for breadboard calibration.</string>
     <string name="ar_unavailable">This phone does not support ARCore.</string>
+    <string name="ui_circuit">circuit /</string>
+    <string name="ui_settings">Settings</string>
+    <string name="ui_01_design_02_review_03_ar">01  DESIGN     /     02  REVIEW     /     03  AR</string>
+    <string name="ui_an_idea_na_circuit_nbuilt_by_you">An idea.\nA circuit.\nBuilt by you.</string>
+    <string name="ui_describe_what_you_want_to_make_review_the_wiring_then_place_it_be">Describe what you want to make. Review the wiring, then place it beside your breadboard in AR.</string>
+    <string name="ui_what_do_you_want_to_build">What do you want to build?</string>
+    <string name="ui_generate_circuit">Generate circuit</string>
+    <string name="ui_start_with_an_idea">START WITH AN IDEA</string>
+    <string name="ui_light_a_red_led">Light a red LED</string>
+    <string name="ui_turn_on_an_led_with_a_button">Turn on an LED with a button</string>
+    <string name="ui_blink_an_led_with_an_arduino_uno">Blink an LED with an Arduino Uno</string>
+    <string name="ui_explore_a_saved_example_offline">Explore a saved example · offline</string>
+    <string name="ui_return_to_your_circuit">Return to your circuit</string>
+    <string name="ui_pinch_to_zoom_drag_to_explore">Pinch to zoom · drag to explore</string>
+    <string name="ui_fit">Fit</string>
+    <string name="ui_show_beside_my_board">Show beside my board</string>
+    <string name="ui_keep_power_disconnected_while_assembling_this_is_a_wiring_guide_c">Keep power disconnected while assembling. This is a wiring guide; check the fit and polarity of your actual parts.</string>
+    <string name="ui_your_parts">Your parts</string>
+    <string name="ui_previous">Previous</string>
+    <string name="ui_next">Next</string>
+    <string name="ui_view_arduino_code">View Arduino code</string>
+    <string name="ui_design_another_circuit">Design another circuit</string>
 </resources>
 

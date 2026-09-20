@@ -1,0 +1,831 @@
+{
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "const": 3
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "breadboardModel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "openrouter",
+            "fixture"
+          ]
+        },
+        "generatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "breadboard": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "holeMapVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "physicalVerified": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "model",
+            "holeMapVersion",
+            "physicalVerified"
+          ],
+          "additionalProperties": false
+        },
+        "requiredParts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button",
+                  "arduino_uno",
+                  "jumper_wire",
+                  "jumper"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 30
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "quantity"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "mount": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "breadboard"
+                    ]
+                  },
+                  "board": {
+                    "type": "string",
+                    "enum": [
+                      "BB1"
+                    ]
+                  },
+                  "terminals": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                    },
+                    "minProperties": 2,
+                    "maxProperties": 4
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "north",
+                      "south",
+                      "east",
+                      "west"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "board",
+                  "terminals"
+                ],
+                "additionalProperties": false
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "value",
+              "assetId",
+              "mount",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 3,
+          "maxItems": 4
+        },
+        "jumperWires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+              },
+              "color": {
+                "type": "string",
+                "enum": [
+                  "red",
+                  "black",
+                  "yellow",
+                  "blue",
+                  "green"
+                ]
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "from",
+              "to",
+              "color",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 12
+        },
+        "nets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                },
+                "minItems": 2,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "id",
+              "members"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 6
+        },
+        "validation": {
+          "type": "object",
+          "properties": {
+            "valid": {
+              "type": "boolean",
+              "const": true
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "valid",
+            "checks",
+            "warnings"
+          ],
+          "additionalProperties": false
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "componentIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+                },
+                "minItems": 0,
+                "maxItems": 100
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "step",
+              "componentIds",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "version",
+        "sessionId",
+        "breadboardModel",
+        "title",
+        "prompt",
+        "source",
+        "generatedAt",
+        "breadboard",
+        "requiredParts",
+        "components",
+        "jumperWires",
+        "nets",
+        "validation",
+        "instructions"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "const": 3
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "breadboardModel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "openrouter",
+            "fixture"
+          ]
+        },
+        "generatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "breadboard": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "holeMapVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "physicalVerified": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "model",
+            "holeMapVersion",
+            "physicalVerified"
+          ],
+          "additionalProperties": false
+        },
+        "requiredParts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button",
+                  "arduino_uno",
+                  "jumper_wire",
+                  "jumper"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 30
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "quantity"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "power_supply",
+                  "led",
+                  "resistor",
+                  "button"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "mount": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "breadboard"
+                    ]
+                  },
+                  "board": {
+                    "type": "string",
+                    "enum": [
+                      "BB1"
+                    ]
+                  },
+                  "terminals": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                    },
+                    "minProperties": 2,
+                    "maxProperties": 4
+                  },
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "north",
+                      "south",
+                      "east",
+                      "west"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "board",
+                  "terminals"
+                ],
+                "additionalProperties": false
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "value",
+              "assetId",
+              "mount",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "jumperWires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+              },
+              "color": {
+                "type": "string",
+                "enum": [
+                  "red",
+                  "black",
+                  "yellow",
+                  "blue",
+                  "green"
+                ]
+              },
+              "buildStep": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "id",
+              "from",
+              "to",
+              "color",
+              "buildStep"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 12
+        },
+        "nets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(BB1:(RAIL:(L\\+|L-|R\\+|R-):(A|B)(:[1-9][0-9]*)?|[A-J][1-9][0-9]*)|[A-Za-z][A-Za-z0-9_-]{0,39}:[A-Za-z][A-Za-z0-9_-]{0,39})$"
+                },
+                "minItems": 2,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "id",
+              "members"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "maxItems": 6
+        },
+        "validation": {
+          "type": "object",
+          "properties": {
+            "valid": {
+              "type": "boolean",
+              "const": true
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "minItems": 0,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "valid",
+            "checks",
+            "warnings"
+          ],
+          "additionalProperties": false
+        },
+        "instructions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "componentIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+                },
+                "minItems": 0,
+                "maxItems": 100
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "step",
+              "componentIds",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "externalDevices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "arduino_uno"
+                ]
+              },
+              "model": {
+                "type": "string",
+                "enum": [
+                  "uno_r3"
+                ]
+              },
+              "assetId": {
+                "type": "string",
+                "enum": [
+                  "arduino_uno_r3_v1"
+                ]
+              },
+              "mount": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "external"
+                    ]
+                  },
+                  "relativeTo": {
+                    "type": "string",
+                    "enum": [
+                      "BB1"
+                    ]
+                  },
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "right",
+                      "top",
+                      "bottom"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "relativeTo",
+                  "side"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "model",
+              "assetId",
+              "mount"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "firmware": {
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string",
+              "enum": [
+                "circuit.ino"
+              ]
+            },
+            "board": {
+              "type": "string",
+              "enum": [
+                "Arduino Uno R3"
+              ]
+            },
+            "language": {
+              "type": "string",
+              "enum": [
+                "arduino"
+              ]
+            },
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "uploadInstructions": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "filename",
+            "board",
+            "language",
+            "code",
+            "uploadInstructions"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "sessionId",
+        "breadboardModel",
+        "title",
+        "prompt",
+        "source",
+        "generatedAt",
+        "breadboard",
+        "requiredParts",
+        "components",
+        "jumperWires",
+        "nets",
+        "validation",
+        "instructions",
+        "externalDevices",
+        "firmware"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

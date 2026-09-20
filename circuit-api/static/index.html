@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Circuit Lab</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<body>
+<header><a href="/" class="brand"><span class="logo">⌁</span> Circuit Lab</a><span id="connection" role="status">Connecting…</span></header>
+<main>
+<div class="intro"><div><h1>Build a breadboard circuit</h1><p>Choose your parts and plan each connection.</p></div><div class="session"><label for="session">Session</label><input id="session" value="demo-button-led" pattern="[A-Za-z0-9_-]{1,64}" maxlength="64"><small>Use this ID to load the same layout in XR.</small></div></div>
+<div class="workspace">
+<section class="panel controls" aria-labelledby="design-title"><div class="panel-heading"><span class="step">1</span><h2 id="design-title">Circuit</h2></div>
+<label for="prompt">What do you want to build?</label><textarea id="prompt" rows="4" maxlength="1000">Turn on an LED when a button is pressed</textarea>
+<p class="hint">Supports one LED: always on, button-controlled, or blinking from an Arduino Uno.</p>
+<label for="board">Breadboard</label><select id="board"><option>Loading…</option></select>
+<div class="inventory-title"><h3>Parts kit</h3><span>Quantity</span></div><div id="inventory"></div>
+<button class="primary" id="generate" disabled>Generate circuit <span>↗</span></button><button class="secondary" id="analyze" disabled>Identify parts only</button>
+<div class="offline"><p>Ready-made circuits</p><div><button id="demo-button" disabled>Button + LED</button><button id="demo-led" disabled>LED</button><button id="demo-arduino" disabled>Arduino blink</button></div></div>
+</section>
+<section class="panel result" aria-labelledby="result-title"><div class="panel-heading"><span class="step">2</span><h2 id="result-title">Layout</h2><span id="source" class="pill">No circuit yet</span></div>
+<div id="status" role="status" aria-live="polite">Generate a circuit or load a ready-made one to see its layout.</div>
+<div class="board-top"><div><strong id="board-caption">Breadboard</strong><small>Top view · columns A–J across · rows 1–63 down · 2.54 mm pitch</small></div><label class="view-control" for="board-view">View<select id="board-view"><option value="circuit">Fit circuit</option><option value="full">Full board</option></select></label></div>
+<div id="preview" role="region" tabindex="0" aria-label="Breadboard layout; scroll to see the full board"></div>
+<div class="legend"><span><i class="red"></i>LED / supply</span><span><i class="amber"></i>Resistor / signal</span><span><i class="blue"></i>Button</span><span><i class="rail-pos"></i>+ rail</span><span><i class="rail-neg"></i>− rail</span></div>
+<div id="parts"></div>
+<div class="wiring-heading"><div><h3>Connections</h3><p class="hint">Select a connection or build step to highlight its holes.</p></div><button id="clear-focus">Show all</button></div>
+<p class="net-note">Holes A–E in a numbered row share one strip; F–J share another. Each + and − rail has two separate sections. Rails need a supply connection to carry power.</p>
+<div id="connections"></div><div id="firmware" hidden><h3>Arduino sketch</h3><p id="upload-help"></p><pre id="sketch"></pre><button id="download-sketch">Download circuit.ino ↓</button></div><div id="steps"></div>
+<div class="export"><button id="download" disabled>Download placement.json ↓</button><button id="copy" disabled>Copy JSON</button><button id="latest">Load saved session</button></div>
+<details><summary>Placement JSON</summary><pre id="json">No circuit yet.</pre></details>
+<p class="footnote">Before powering on, check polarity, pin spacing, and rail continuity on your board. This layout is a wiring guide, not a physical fit certification.</p>
+</section>
+</div>
+<footer><span>Circuit Lab</span><span>2.54 mm grid · Board-local coordinates in meters</span></footer>
+</main></body></html>

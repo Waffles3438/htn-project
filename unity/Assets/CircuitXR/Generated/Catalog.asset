@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 777b319635f2a499f98f64c15d57404d, type: 3}
+  m_Name: Catalog
+  m_EditorClassIdentifier: CircuitXR.Runtime::CircuitXR.CircuitPrefabCatalog
+  surfaceShader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
+  labelFont: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+  breadboardComponents:
+  - componentType: led
+    prefab: {fileID: 938929429677996599, guid: 5cbb0b5c6a4a4984dacec9f888c0b447, type: 3}
+  - componentType: resistor
+    prefab: {fileID: 5052925708506617203, guid: 61684833c2696f4479ed7fbedbb0cba4, type: 3}
+  - componentType: button
+    prefab: {fileID: 6196436351039510174, guid: 9973f4ecc58b59548b0fd5ff9e6faefd, type: 3}

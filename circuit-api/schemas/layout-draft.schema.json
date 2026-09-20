@@ -1,0 +1,117 @@
+{
+  "type": "object",
+  "properties": {
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+          },
+          "terminals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "positive",
+                    "negative",
+                    "anode",
+                    "cathode",
+                    "a",
+                    "b",
+                    "a1",
+                    "a2",
+                    "b1",
+                    "b2"
+                  ]
+                },
+                "hole": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "name",
+                "hole"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 4
+          },
+          "buildStep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id",
+          "terminals",
+          "buildStep"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 3,
+      "maxItems": 4
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "red",
+              "black",
+              "yellow",
+              "blue",
+              "green"
+            ]
+          },
+          "buildStep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+          "color",
+          "buildStep"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 12
+    }
+  },
+  "required": [
+    "components",
+    "wires"
+  ],
+  "additionalProperties": false
+}

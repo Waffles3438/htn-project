@@ -1,338 +1,201 @@
 package com.htn.breadboardar
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.PointF
+import android.net.Uri
+import android.provider.Settings
+import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import android.os.Bundle
 import android.view.View
-import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ScrollView
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import com.google.ar.core.ArCoreApk
-import com.google.ar.core.Config
-import com.google.ar.core.Pose
-import com.google.ar.core.Session
-import com.google.ar.core.exceptions.CameraNotAvailableException
-import com.google.ar.core.exceptions.UnavailableApkTooOldException
-import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException
-import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException
-import com.google.ar.core.exceptions.UnavailableSdkTooOldException
-import com.htn.breadboardar.ar.ArCameraPreview
-import com.htn.breadboardar.ar.BoardCalibration
-import com.htn.breadboardar.ar.CameraState
-import com.htn.breadboardar.ar.ThreePointCalibrator
-import com.htn.breadboardar.network.GlbModelDownloader
-import com.htn.breadboardar.render.NativeBreadboardRenderer
-import com.htn.breadboardar.ui.CalibrationOverlayView
+import androidx.activity.addCallback
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.htn.breadboardar.circuit.BoardGeometry
+import com.htn.breadboardar.circuit.CircuitDefinition
+import com.htn.breadboardar.network.ApiConfig
+import com.htn.breadboardar.network.CircuitApiClient
+import com.htn.breadboardar.ui.BreadboardView
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.File
+import java.util.UUID
 
-class MainActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModelDownloader.Listener {
-    private lateinit var preview: ArCameraPreview
-    private lateinit var overlay: CalibrationOverlayView
-    private lateinit var nativeBreadboardRenderer: NativeBreadboardRenderer
-    private lateinit var statusText: TextView
-    private lateinit var modelUrl: EditText
-    private lateinit var loadModelButton: Button
-    private lateinit var calibrateButton: Button
-    private lateinit var resetButton: Button
-
-    private val calibrator = ThreePointCalibrator()
-    private val modelDownloader = GlbModelDownloader(this)
-    private var arSession: Session? = null
-    private var activeCalibration: BoardCalibration? = null
-    private var pendingCalibrationTap: PointF? = null
-    private var userRequestedArInstall = true
-    private var baseStatus = ""
-    private var trackingHint: String? = null
-    private var selectedBoardCorners: List<PointF>? = null
-    private var boardFitPx = 0
-
-    private val cameraPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) {
-            startAr()
-        } else {
-            showStatus(getString(R.string.camera_permission_required))
-        }
+class MainActivity : AppCompatActivity() {
+    private lateinit var board: BoardGeometry
+    private lateinit var schematic: BreadboardView
+    private lateinit var api: CircuitApiClient
+    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchArViewer() else MaterialAlertDialogBuilder(this)
+            .setTitle("Camera access is needed for AR")
+            .setMessage("Your schematic is still available. Allow Camera access in Android settings to place it beside your board.")
+            .setNegativeButton("Keep reviewing", null)
+            .setPositiveButton("Open settings") { _, _ -> startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
+            .show()
     }
+    private var circuit: CircuitDefinition? = null
+    private var step = -1
+    private var showingReview = false
+    private var generating = false
+    private val prefs by lazy { getSharedPreferences("circuit", MODE_PRIVATE) }
+    private val prompt get() = findViewById<EditText>(R.id.prompt_input)
+    private val status get() = findViewById<TextView>(R.id.circuit_status)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        // The viewer is watched continuously while the learner builds the circuit, so
-        // the screen must not blank. This is also a stability requirement: letting the
-        // device doze starves ARCore's IMU feed, which made its native motion-stereo
-        // depth thread abort and take the process with it.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        preview = findViewById(R.id.ar_preview)
-        overlay = findViewById(R.id.calibration_overlay)
-        nativeBreadboardRenderer = NativeBreadboardRenderer(
-            textureView = findViewById(R.id.model_overlay),
-            assets = assets,
-        )
-        statusText = findViewById(R.id.status_text)
-        modelUrl = findViewById(R.id.model_url)
-        loadModelButton = findViewById(R.id.load_model_button)
-        calibrateButton = findViewById(R.id.calibrate_button)
-        resetButton = findViewById(R.id.reset_button)
-
-        preview.listener = this
-        overlay.listener = object : CalibrationOverlayView.Listener {
-            override fun onCalibrationTap(x: Float, y: Float) {
-                pendingCalibrationTap = PointF(x, y)
-                preview.requestCalibrationTap(x, y)
-            }
-
-            override fun onRectangleSelected(index: Int, corners: List<PointF>) {
-                selectBreadboardRectangle(index, corners)
-            }
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.app_root)) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
         }
-
-        loadModelButton.setOnClickListener(::loadGlbFromUrl)
-        calibrateButton.setOnClickListener(::beginCalibration)
-        resetButton.setOnClickListener { resetCalibration("Calibration reset. Tap Calibrate to begin again.") }
-        showStatus("Tap Calibrate to find your breadboard. Optionally load a .glb model from your backend.")
-    }
-
-    override fun onResume() {
-        super.onResume()
-        nativeBreadboardRenderer.resume()
-        startAr()
-    }
-
-    override fun onPause() {
-        nativeBreadboardRenderer.pause()
-        preview.onPause()
-        arSession?.pause()
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        nativeBreadboardRenderer.destroy()
-        preview.release()
-        modelDownloader.close()
-        arSession?.close()
-        super.onDestroy()
-    }
-
-    override fun onCameraState(@Suppress("UNUSED_PARAMETER") state: CameraState) = Unit
-
-    override fun onCalibrationHit(pose: Pose) {
-        try {
-            pendingCalibrationTap?.let { overlay.addTapMarker(it.x, it.y) }
-            pendingCalibrationTap = null
-            val calibration = calibrator.addPoint(pose)
-            val remaining = 3 - calibrator.pointCount
-            if (calibration == null) {
-                showStatus("Point saved. Tap $remaining more breadboard reference point${if (remaining == 1) "" else "s"}.")
-            } else {
-                activeCalibration = calibration
-                overlay.endCalibration()
-                preview.setCalibrationActive(false)
-                preview.setBoardOutline(calibration)
-                showStatus("Board calibrated. Tap Reset to locate it again.")
-            }
-        } catch (error: IllegalArgumentException) {
-            pendingCalibrationTap = null
-            resetCalibration(error.message ?: "Calibration failed. Try again with three separated points.")
+        onBackPressedDispatcher.addCallback(this) {
+            if (showingReview) showReview(false) else finish()
+        }
+        board = BoardGeometry(assets.open("board-map.json").bufferedReader().use { it.readText() })
+        schematic = findViewById<BreadboardView>(R.id.breadboard_view).also { it.board = board }
+        api = CircuitApiClient { prefs.getString("api_url", ApiConfig.baseUrl).orEmpty() }
+        findViewById<Button>(R.id.settings_button).setOnClickListener { settings() }
+        findViewById<Button>(R.id.generate_button).setOnClickListener { generate() }
+        findViewById<Button>(R.id.example_led).setOnClickListener { setPrompt("Turn on a red LED") }
+        findViewById<Button>(R.id.example_button).setOnClickListener { setPrompt("Turn on a red LED while I hold a button") }
+        findViewById<Button>(R.id.example_uno).setOnClickListener { setPrompt("Blink an external red LED using an Arduino Uno") }
+        findViewById<Button>(R.id.demo_button).setOnClickListener {
+            MaterialAlertDialogBuilder(this).setTitle("Explore an example")
+                .setItems(arrayOf("Red LED", "Button + LED", "Arduino Uno + LED")) { _, choice ->
+                    val name = listOf("led", "button_led", "arduino_led")[choice]
+                    accept(assets.open("$name.placement.json").bufferedReader().use { it.readText() })
+                }.show()
+        }
+        findViewById<Button>(R.id.return_button).setOnClickListener { showReview(true) }
+        findViewById<Button>(R.id.new_circuit_button).setOnClickListener { showReview(false) }
+        findViewById<Button>(R.id.fit_button).setOnClickListener { schematic.fit() }
+        findViewById<Button>(R.id.previous_step).setOnClickListener { step--; renderStep() }
+        findViewById<Button>(R.id.next_step).setOnClickListener { step++; renderStep() }
+        findViewById<Button>(R.id.show_ar_button).setOnClickListener { openAr() }
+        findViewById<Button>(R.id.firmware_button).setOnClickListener { showFirmware() }
+        prompt.setText(prefs.getString("prompt", ""))
+        val last = File(filesDir, "last-circuit.json")
+        if (last.isFile) runCatching { accept(last.readText(), persist = false) }
+            .onFailure { status.text = "Your saved circuit needs to be regenerated." }
+        if (savedInstanceState != null) {
+            step = savedInstanceState.getInt("step", -1)
+            showReview(savedInstanceState.getBoolean("review") && circuit != null)
+            renderStep()
         }
     }
-
-    override fun onArError(message: String) {
-        pendingCalibrationTap = null
-        showStatus(message)
+    private fun setPrompt(text: String) { prompt.setText(text); prompt.setSelection(text.length) }
+    private fun showReview(review: Boolean) {
+        showingReview = review
+        findViewById<View>(R.id.design_panel).visibility = if (review) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.review_panel).visibility = if (review) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.return_button).visibility = if (circuit != null) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.progress_label).text = if (review) "01  DESIGN     /     02  REVIEW  •     /     03  AR" else "01  DESIGN  •     /     02  REVIEW     /     03  AR"
+        findViewById<ScrollView>(R.id.content_scroll).post { findViewById<ScrollView>(R.id.content_scroll).smoothScrollTo(0, 0) }
     }
-
-    override fun onTrackingHint(message: String?) {
-        trackingHint = message
-        renderStatus()
-    }
-
-    override fun onSurfaceTargets(targets: List<PointF>) {
-        overlay.showSurfaceTargets(targets)
-    }
-
-    override fun onBoardOutline(outline: List<PointF>) {
-        overlay.showBoardOutline(outline)
-    }
-
-    override fun onCandidateRectangles(rectangles: List<List<PointF>>) {
-        overlay.showCandidateRectangles(rectangles)
-    }
-
-    private fun selectBreadboardRectangle(index: Int, corners: List<PointF>) {
-        selectedBoardCorners = corners
-        overlay.lockSelectedRectangle(corners)
-        preview.setRectangleDetectionActive(false)
-        preview.setCalibrationActive(false)
-        preview.selectRectangle(index)
-        showStatus("Working out the board position, hold the phone steady.")
-    }
-
-    override fun onBoardTracked(reprojectionErrorPx: Float) {
-        overlay.clearSelectedRectangle()
-        boardFitPx = reprojectionErrorPx.toInt()
-        showStatus("Board locked (fit ${boardFitPx}px). Keep the whole board in view.")
-    }
-
-    override fun onBoardVisibility(visible: Boolean) {
-        if (!visible) nativeBreadboardRenderer.hide()
-        showStatus(
-            if (visible) {
-                "Board locked (fit ${boardFitPx}px). Keep the whole board in view."
-            } else {
-                "Board out of view. The overlay is hidden rather than left at a stale position. " +
-                    "Bring the whole board back into frame."
-            },
-        )
-    }
-
-    override fun onBoardPoseInCamera(
-        @Suppress("UNUSED_PARAMETER") physicalTranslation: FloatArray,
-        @Suppress("UNUSED_PARAMETER") physicalQuaternion: FloatArray,
-        displayTranslation: FloatArray,
-        displayQuaternion: FloatArray,
-        northAtNegativeY: Boolean,
-    ) {
-        nativeBreadboardRenderer.showBoardNorthOfOutline(
-            translation = displayTranslation,
-            quaternion = displayQuaternion,
-            northAtNegativeY = northAtNegativeY,
-        )
-    }
-
-    override fun onCameraProjection(projection: FloatArray) {
-        nativeBreadboardRenderer.updateArCameraProjection(projection)
-    }
-
-    override fun onBoardCalibrated(@Suppress("UNUSED_PARAMETER") calibration: BoardCalibration) {
-        val isFirst = activeCalibration == null
-        activeCalibration = calibration
-        // The yellow outline is drawn from the anchor every frame, so if it stays on
-        // the real board as you move, the pose is right.
-        overlay.clearSelectedRectangle()
-        if (isFirst) {
-            showStatus("Board anchored. The yellow outline should stay on the breadboard as you move.")
+    private fun generate() {
+        if (generating) return
+        val text = prompt.text.toString().trim()
+        if (text.length < 3) { prompt.error = "Describe your circuit first"; return }
+        if (prefs.getString("api_url", ApiConfig.baseUrl).isNullOrBlank()) {
+            status.text = "Set your hosted circuit service URL in Settings, or explore an offline example."
+            settings(); return
+        }
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(prompt.windowToken, 0)
+        prefs.edit().putString("prompt", text).apply()
+        generating = true
+        findViewById<Button>(R.id.generate_button).apply { isEnabled = false; this.text = "Designing your circuit…" }
+        findViewById<View>(R.id.demo_button).isEnabled = false
+        status.text = "Choosing parts and checking connections. This can take about a minute."
+        api.generate(text, "android-${UUID.randomUUID()}") { result ->
+            if (isDestroyed) return@generate
+            generating = false
+            findViewById<Button>(R.id.generate_button).apply { isEnabled = true; this.text = "Generate circuit" }
+            findViewById<View>(R.id.demo_button).isEnabled = true
+            when (result) {
+                is CircuitApiClient.Result.Success -> runCatching { accept(result.circuit.rawJson) }
+                    .onFailure { status.text = "${it.message} Your previous circuit is still saved." }
+                is CircuitApiClient.Result.Failure -> status.text = result.userMessage + if (circuit != null) " Your previous circuit is still saved." else ""
+            }
         }
     }
-
-    override fun onGlbDownloaded(buffer: java.nio.ByteBuffer, sourceUrl: String) {
-        loadModelButton.isEnabled = true
-        runCatching { nativeBreadboardRenderer.replaceModelGlb(buffer) }
-            .onSuccess {
-                showStatus("Loaded .glb model from ${sourceUrl.substringAfterLast('/')}. Calibrate to place it.")
-            }
-            .onFailure { error ->
-                showStatus(error.message ?: "The downloaded GLB could not be rendered.")
-            }
-    }
-
-    override fun onGlbDownloadFailed(message: String) {
-        loadModelButton.isEnabled = true
-        showStatus(message)
-    }
-
-    private fun loadGlbFromUrl(@Suppress("UNUSED_PARAMETER") view: View) {
-        val url = modelUrl.text.toString().trim()
-        if (url.isBlank()) {
-            showStatus("Enter the direct HTTP(S) URL of a .glb file.")
-            return
+    private fun accept(json: String, persist: Boolean = true) {
+        val next = CircuitDefinition.parse(json)
+        board.validate(next)
+        if (persist) {
+            val file = androidx.core.util.AtomicFile(File(filesDir, "last-circuit.json"))
+            val stream = file.startWrite()
+            try { stream.write(json.toByteArray()); file.finishWrite(stream) } catch (error: Exception) { file.failWrite(stream); throw error }
         }
-        runCatching { modelDownloader.download(url) }
-            .onSuccess {
-                loadModelButton.isEnabled = false
-                showStatus("Downloading .glb model…")
-            }
-            .onFailure { error ->
-                showStatus(error.message ?: "Could not start the GLB download.")
-            }
+        circuit = next; step = -1
+        schematic.circuit = next
+        findViewById<TextView>(R.id.circuit_title).text = next.title
+        findViewById<TextView>(R.id.circuit_summary).text = "${if (next.source == "fixture") "Saved example" else "Connections checked"} · ${next.components.size + next.externalDevices.size} parts · ${next.jumperWires.size} wires"
+        findViewById<TextView>(R.id.parts_text).text = next.requiredParts.joinToString("\n") { it.replace('_', ' ').replace("220ohm", "220 Ω") }
+        findViewById<View>(R.id.firmware_button).visibility = if (next.firmwareCode.isNullOrBlank()) View.GONE else View.VISIBLE
+        status.text = ""
+        renderStep(); showReview(true)
     }
-
-    private fun beginCalibration(@Suppress("UNUSED_PARAMETER") view: View) {
-        activeCalibration = null
-        pendingCalibrationTap = null
-        calibrator.reset()
-        selectedBoardCorners = null
-        preview.clearBoardOutline()
-        nativeBreadboardRenderer.hide()
-        preview.setCalibrationActive(true)
-        preview.setRectangleDetectionActive(true)
-        overlay.beginCalibration()
-        showStatus("Tap the outlined rectangle that is your breadboard.")
+    private fun renderStep() {
+        val model = circuit ?: return
+        step = step.coerceIn(-1, model.instructions.lastIndex)
+        val instruction = model.instructions.getOrNull(step)
+        findViewById<TextView>(R.id.step_label).text = if (instruction == null) "Build it, one connection at a time" else "Step ${step + 1} of ${model.instructions.size}"
+        findViewById<TextView>(R.id.step_text).text = instruction?.text ?: "Start with power disconnected. Tap Next to highlight each part and its exact breadboard holes."
+        schematic.highlightedIds = instruction?.componentIds?.toSet() ?: emptySet()
+        findViewById<View>(R.id.previous_step).isEnabled = step >= 0
+        findViewById<View>(R.id.next_step).isEnabled = step < model.instructions.lastIndex
     }
-
-    private fun resetCalibration(message: String) {
-        activeCalibration = null
-        calibrator.reset()
-        selectedBoardCorners = null
-        preview.clearBoardOutline()
-        nativeBreadboardRenderer.hide()
-        preview.setCalibrationActive(false)
-        preview.setRectangleDetectionActive(false)
-        overlay.resetCalibration()
-        showStatus(message)
-    }
-
-    private fun startAr() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-            return
+    private fun settings() {
+        val field = EditText(this).apply {
+            hint = "https://your-circuit-service.vercel.app"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(); setText(prefs.getString("api_url", ApiConfig.baseUrl))
+            setPadding(32, 24, 32, 24)
         }
-
-        try {
-            if (arSession == null) {
-                when (ArCoreApk.getInstance().requestInstall(this, userRequestedArInstall)) {
-                    ArCoreApk.InstallStatus.INSTALL_REQUESTED -> {
-                        userRequestedArInstall = false
-                        return
-                    }
-
-                    ArCoreApk.InstallStatus.INSTALLED -> Unit
-                }
-
-                arSession = Session(this).also { session ->
-                    session.configure(
-                        Config(session).apply {
-                            focusMode = Config.FocusMode.AUTO
-                            planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
-                        },
-                    )
-                    preview.attachSession(session)
-                }
-            }
-
-            arSession?.resume()
-            preview.onResume()
-            calibrateButton.isEnabled = arSession != null
-            resetButton.isEnabled = true
-        } catch (exception: UnavailableArcoreNotInstalledException) {
-            showStatus("Google Play Services for AR must be installed.")
-        } catch (exception: UnavailableApkTooOldException) {
-            showStatus("Update Google Play Services for AR, then reopen the app.")
-        } catch (exception: UnavailableSdkTooOldException) {
-            showStatus("This AR viewer needs an update.")
-        } catch (exception: UnavailableDeviceNotCompatibleException) {
-            showStatus(getString(R.string.ar_unavailable))
-        } catch (exception: CameraNotAvailableException) {
-            showStatus("Camera is unavailable. Close other camera apps and reopen this app.")
-        } catch (exception: Exception) {
-            showStatus("Could not start AR: ${exception.message ?: "unknown error"}")
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("Circuit service")
+            .setMessage("Use the HTTPS address of your deployed circuit API. Offline examples work without a service.")
+            .setView(field).setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
+        dialog.setOnShowListener { dialog.getButton(-1).setOnClickListener {
+            val text = field.text.toString().trim().trimEnd('/')
+            val url = text.toHttpUrlOrNull()
+            if (url == null || (url.scheme != "https" && !BuildConfig.DEBUG) || url.username.isNotEmpty() || url.password.isNotEmpty() || url.query != null || url.fragment != null || url.encodedPath != "/") {
+                field.error = "Enter a service origin, such as https://example.vercel.app"
+            } else { prefs.edit().putString("api_url", text).apply(); dialog.dismiss(); status.text = "Circuit service saved." }
+        } }
+        dialog.show()
+    }
+    private fun openAr() {
+        val model = circuit ?: return
+        board.validate(model)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchArViewer()
+        else cameraPermission.launch(Manifest.permission.CAMERA)
+    }
+    private fun launchArViewer() {
+        val model = circuit ?: return
+        // Retain the selected circuit as private app data for the AR handoff. This
+        // avoids Binder's payload limit and lets the viewer later load a generated
+        // placement model without changing the navigation contract.
+        File(filesDir, "ar-circuit.json").writeText(model.rawJson)
+        startActivity(Intent(this, ArViewerActivity::class.java))
+    }
+    private fun showFirmware() {
+        val model = circuit ?: return
+        val code = TextView(this).apply {
+            text = "Upload from a computer using Arduino IDE. Disconnect USB before wiring; verify polarity before reconnecting.\n\n${model.firmwareCode}"
+            setTextIsSelectable(true); setPadding(32, 24, 32, 24); typeface = android.graphics.Typeface.MONOSPACE
         }
+        MaterialAlertDialogBuilder(this).setTitle("Arduino sketch").setView(ScrollView(this).apply { addView(code) })
+            .setPositiveButton("Done", null).show()
     }
-
-    private fun showStatus(message: String) {
-        baseStatus = message
-        renderStatus()
-    }
-
-    /** The AR tracking hint sits above whatever step the user is on, never replacing it. */
-    private fun renderStatus() {
-        val hint = trackingHint
-        statusText.text = if (hint.isNullOrBlank()) baseStatus else "$hint\n$baseStatus"
-    }
+    override fun onSaveInstanceState(outState: Bundle) { outState.putBoolean("review", showingReview); outState.putInt("step", step); super.onSaveInstanceState(outState) }
+    override fun onPause() { prefs.edit().putString("prompt", prompt.text.toString()).apply(); super.onPause() }
+    override fun onDestroy() { api.cancel(); super.onDestroy() }
 }

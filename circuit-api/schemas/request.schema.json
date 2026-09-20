@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 1000
+    },
+    "availableParts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "power_supply",
+              "led",
+              "resistor",
+              "button",
+              "arduino_uno",
+              "jumper_wire",
+              "jumper"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30
+          }
+        },
+        "required": [
+          "type",
+          "value",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 20
+    },
+    "breadboardModel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "additionalProperties": false
+}
