@@ -4,6 +4,25 @@ Type a circuit idea on the phone, review its breadboard schematic and assembly s
 
 The Android app includes the circuit designer, the Python circuit API contract, and the native AR viewer. Physical alignment must still be verified on an ARCore-capable phone. The Unity project remains in the repository as an optional alternative renderer, not as the launcher's required AR module.
 
+## Native AR viewing
+
+Tap **Calibrate**, hold the whole breadboard in view, then tap its detected outline. Once the app says **Board tracked**, move slowly around it while keeping the physical board visible. Camera-image measurements correct the outline and model position continuously, even when ARCore's world map drifts or pauses. ARCore motion is used only for short interpolation after it agrees with repeated image measurements; large tracking jumps are rejected. The model remains three-dimensional and follows the measured viewing angle. Brief missed detections are tolerated; if the full outline is lost for longer, bring it back into view for automatic reacquisition.
+
+Calibration accepts only corner orders that keep the model's printed top facing the camera. It fixes the adjacent model's side at calibration time, so it does not switch sides while you walk around. The detector does not read the board's printed labels. Tap **Calibrate** again after moving the physical breadboard.
+
+Start calibration from above the board: cyan selection outlines (and the green selected outline) are rectangles. Once calibrated, the yellow outline uses the measured perspective quadrilateral, not that selection rectangle. Calibration compares 165 × 55 mm and 165 × 65 mm board profiles and locks the chosen dimensions for tracking; these are supported assumptions, not a measurement of an arbitrary board. A second brightness pass separates bright carpet threads from the plastic. If edge fitting fails, selection remains active so you can tap again without restarting calibration.
+
+Enclosing boxes with no measured edge support remain selection targets only; they cannot replace a tracked perspective pose. Sudden changes exceeding roughly 12° or 25 mm require at least three consistent measurements over 120 ms before the tracker accepts them. Small continuous movements still update immediately. Rejected detections do not update corner identity or prolong the visibility timeout.
+
+On Windows, build, test and install on a USB-connected phone with USB debugging enabled:
+
+```powershell
+.\gradlew.bat --console=plain :app:testDebugUnitTest :app:assembleDebug
+if ($LASTEXITCODE -eq 0) {
+    & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "$PWD\app\build\outputs\apk\debug\app-debug.apk"
+}
+```
+
 ## Build on this Mac
 
 Java 17, Android SDK/adb/emulator, Unity 6000.6.2f1, Android Build Support, and Unity Hub are installed under `../.android-tools/`. The install is local to this workspace, not `/Applications`. Unity Hub is `../.android-tools/Unity Hub.app`; the editor is `../.android-tools/Unity-6000.6.2f1/Unity.app`.

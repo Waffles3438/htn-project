@@ -118,7 +118,7 @@ class CalibrationOverlayView @JvmOverloads constructor(
      * direct detector result, so this removes fast corner shimmer without hiding
      * genuine movement of the board in the camera view.
      */
-    fun showBoardOutline(points: List<PointF>) {
+    fun showBoardOutline(points: List<PointF>, smoothDetection: Boolean = true) {
         if (points.size != OUTLINE_CORNERS) {
             boardOutline = emptyList()
             smoothedBoardOutline = null
@@ -130,7 +130,9 @@ class CalibrationOverlayView @JvmOverloads constructor(
             val point = points[index / 2]
             if (index % 2 == 0) point.x else point.y
         }
-        val filtered = boardOutlineSmoother.smooth(smoothedBoardOutline, fresh)
+        // Anchor projections already contain ARCore's motion estimate. Filtering
+        // them again in screen space makes the outline lag the live 3-D model.
+        val filtered = if (smoothDetection) boardOutlineSmoother.smooth(smoothedBoardOutline, fresh) else fresh
         smoothedBoardOutline = filtered
         boardOutline = List(OUTLINE_CORNERS) { corner ->
             PointF(filtered[corner * 2], filtered[corner * 2 + 1])

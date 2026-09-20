@@ -91,6 +91,7 @@ class RectangleDetectorTest {
 
         val candidates = detector.detect(luma, WIDTH, HEIGHT, WIDTH)
         assertEquals(1, candidates.size)
+        assertRectangle(candidates[0].selectionCorners)
 
         // The trapezoid's own area, which is strictly less than any enclosing rectangle.
         val trueArea = 0.5f * ((topRight - topLeft) + (bottomRight - bottomLeft)) * (bottom - top)
@@ -123,6 +124,7 @@ class RectangleDetectorTest {
 
         assertEquals(1, candidates.size)
         assertEquals(5, candidates[0].stepPx)
+        assertRectangle(candidates[0].selectionCorners)
         val worstCornerDistance = expected.indices
             .filter { it % 2 == 0 }
             .maxOf { expectedIndex ->
@@ -147,6 +149,19 @@ class RectangleDetectorTest {
             total += quad[i * 2] * quad[j * 2 + 1] - quad[j * 2] * quad[i * 2 + 1]
         }
         return kotlin.math.abs(total) / 2f
+    }
+
+    private fun assertRectangle(corners: FloatArray) {
+        for (i in 0 until 4) {
+            val next = (i + 1) % 4
+            val after = (i + 2) % 4
+            val ax = corners[next * 2] - corners[i * 2]
+            val ay = corners[next * 2 + 1] - corners[i * 2 + 1]
+            val bx = corners[after * 2] - corners[next * 2]
+            val by = corners[after * 2 + 1] - corners[next * 2 + 1]
+            val cosine = (ax * bx + ay * by) / kotlin.math.hypot(ax, ay) / kotlin.math.hypot(bx, by)
+            assertEquals("Selection corners must form right angles", 0f, cosine, 0.0001f)
+        }
     }
 
     private fun syntheticFrame(): ByteArray = ByteArray(WIDTH * HEIGHT) { 30.toByte() }

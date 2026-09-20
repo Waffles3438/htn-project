@@ -15,16 +15,45 @@ import com.google.ar.core.Pose
  */
 internal object CameraPoseFrames {
     /**
+     * Captures the board in the AR world using the camera pose from the same image
+     * as the visual solve. Keep this world pose (or an ARCore anchor made from it)
+     * fixed as the phone moves; replaying an old camera-relative solve would make
+     * the model follow the phone instead of revealing its sides.
+     */
+    fun boardInWorld(
+        boardInPhysicalCamera: PlanarPoseSolver.Result,
+        physicalCameraInWorld: Pose,
+    ): Pose = physicalCameraInWorld.compose(
+        Pose(boardInPhysicalCamera.translation, boardInPhysicalCamera.quaternion),
+    )
+
+    /**
+     * Expresses an anchored board in the current camera axes. Pass the current
+     * physical camera pose for image projection, or its display-oriented pose for
+     * rendering with ARCore's display projection.
+     */
+    fun boardInCamera(boardInWorld: Pose, cameraInWorld: Pose): PlanarPoseSolver.Result {
+        val cameraBoardPose = cameraInWorld.inverse().compose(boardInWorld)
+        return PlanarPoseSolver.Result(
+            cameraBoardPose.translation.copyOf(),
+            cameraBoardPose.rotationQuaternion.copyOf(),
+        )
+    }
+
+    /**
      * Returns the transform from physical-image-camera coordinates to
      * display-oriented-camera coordinates.
      *
      * Both input poses map their respective camera frames into the AR world, so
      * `inverse(display) * physical` maps a point from physical to display axes.
+     * Both cameras have the same origin: use rotation only to avoid cancellation
+     * errors when a corrupted world map reports very large translations.
      */
     fun physicalToDisplayCamera(
         physicalCameraPose: Pose,
         displayOrientedCameraPose: Pose,
-    ): Pose = displayOrientedCameraPose.inverse().compose(physicalCameraPose)
+    ): Pose = Pose(floatArrayOf(0f, 0f, 0f), displayOrientedCameraPose.rotationQuaternion)
+        .inverse().compose(Pose(floatArrayOf(0f, 0f, 0f), physicalCameraPose.rotationQuaternion))
 
     /** Converts a board-to-physical-camera pose into board-to-display-camera axes. */
     fun boardInDisplayCamera(

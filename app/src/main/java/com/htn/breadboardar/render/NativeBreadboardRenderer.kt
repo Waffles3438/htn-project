@@ -49,11 +49,18 @@ internal class NativeBreadboardRenderer(
     private var cameraProjection: FloatArray? = null
     private var assetLocalTransform: FloatArray? = null
     private var modelWidthMeters = 0f
+    private var physicalBoardWidthMeters = 0.055f
     private var modelHeightMeters = 0f
     private var lowPolyProxyHidden = false
     private var frameScheduled = false
     private var paused = false
     private var released = false
+
+    fun setPhysicalBoardWidth(widthMeters: Float) {
+        checkMainThread()
+        require(widthMeters.isFinite() && widthMeters > 0f)
+        physicalBoardWidthMeters = widthMeters
+    }
 
     private val frameCallback = Choreographer.FrameCallback { frameTimeNanos ->
         frameScheduled = false
@@ -135,7 +142,7 @@ internal class NativeBreadboardRenderer(
         updateOverlayVisibility()
     }
 
-    /** Hides a stale virtual board as soon as the detector loses sight of the physical one. */
+    /** Hides the model on reset or loss of ARCore anchor tracking. */
     fun hide() {
         checkMainThread()
         boardPose = null
@@ -291,10 +298,12 @@ internal class NativeBreadboardRenderer(
         val northCenterY = if (pose.northAtNegativeY) {
             -(NORTH_GAP_M + modelWidthMeters / 2f)
         } else {
-            BOARD_WIDTH_M + NORTH_GAP_M + modelWidthMeters / 2f
+            physicalBoardWidthMeters + NORTH_GAP_M + modelWidthMeters / 2f
         }
 
-        // The planar solver maps board-local -Z toward the phone. Put the virtual board
+        // Calibration accepts only front-facing board-local -Z. Its direction stays
+        // fixed in the world as the phone moves; never billboard the model at the phone.
+        // Put the virtual board
         // directly north of the outline and just camera-side of the physical-board plane,
         // so its printable top is visible and it does not z-fight with the table.
         val northOfBoard = FloatArray(16)
@@ -420,9 +429,6 @@ internal class NativeBreadboardRenderer(
     private companion object {
         const val MODEL_ASSET_PATH = "models/breadboard.glb"
         const val BOARD_LENGTH_M = 0.165f
-        // Measured outer dimensions of the physical demo breadboard: 165 mm x 65 mm.
-        // This must exactly match the board model used by the camera pose solver.
-        const val BOARD_WIDTH_M = 0.065f
         const val NORTH_GAP_M = 0.03f
         const val SURFACE_CLEARANCE_M = 0.001f
         const val FILAMENT_NEAR_M = 0.02f

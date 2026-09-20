@@ -31,7 +31,17 @@ internal class RectangleDetector {
      * [stepPx] is the downscale factor the corners were recovered at, which bounds
      * their accuracy and lets the caller scale its tolerances accordingly.
      */
-    class Candidate(val corners: FloatArray, val areaPx: Float, val stepPx: Int)
+    class Candidate(
+        val corners: FloatArray,
+        val areaPx: Float,
+        val stepPx: Int,
+        // Selection is a rectangle; these corners must never replace the measured
+        // perspective corners used for 3D pose estimation after selection.
+        val selectionCorners: FloatArray,
+        // False means corners are only an enclosing selection box, not measured
+        // perspective. It can be drawn/tapped, but must never flatten a tracked pose.
+        val hasMeasuredCorners: Boolean,
+    )
 
     private var gray = ByteArray(0)
     private var visited = BooleanArray(0)
@@ -78,6 +88,40 @@ internal class RectangleDetector {
         }
 
         val threshold = otsuThreshold(histogram, pixelCount)
+        val coarse = detectAtThreshold(luma, width, height, rowStride, lenient,
+            step, smallWidth, smallHeight, threshold)
+        // Carpet's bright threads can connect to the plastic at the global Otsu
+        // threshold. Split that bright class once more to separate white plastic
+        // from those threads. Keep the original candidate if the second pass cannot
+        // find a coherent, substantial inner object (e.g. a board in dim light).
+        val brightHistogram = IntArray(256) { if (it > threshold) histogram[it] else 0 }
+        val brighter = otsuThreshold(brightHistogram, brightHistogram.sum())
+        if (brighter <= threshold + 12) return coarse.take(MAX_CANDIDATES)
+        val isolated = detectAtThreshold(luma, width, height, rowStride, lenient,
+            step, smallWidth, smallHeight, brighter)
+        return coarse.map { original ->
+            isolated.filter { refined ->
+                isInnerBoard(original, refined) &&
+                    (refined.hasMeasuredCorners || !original.hasMeasuredCorners)
+            }
+                .maxByOrNull { it.areaPx } ?: original
+        }.sortedByDescending { it.areaPx }.take(MAX_CANDIDATES)
+    }
+
+    private fun isInnerBoard(outer: Candidate, inner: Candidate): Boolean {
+        if (inner.areaPx / outer.areaPx !in 0.6f..1.05f) return false
+        val ox = (0 until 4).sumOf { outer.corners[it * 2].toDouble() } / 4
+        val oy = (0 until 4).sumOf { outer.corners[it * 2 + 1].toDouble() } / 4
+        val ix = (0 until 4).sumOf { inner.corners[it * 2].toDouble() } / 4
+        val iy = (0 until 4).sumOf { inner.corners[it * 2 + 1].toDouble() } / 4
+        return kotlin.math.hypot(ix - ox, iy - oy) < rectangleShortestSide(outer.selectionCorners) * 0.2f
+    }
+
+    private fun detectAtThreshold(
+        luma: ByteArray, width: Int, height: Int, rowStride: Int, lenient: Boolean,
+        step: Int, smallWidth: Int, smallHeight: Int, threshold: Int,
+    ): List<Candidate> {
+        val pixelCount = smallWidth * smallHeight
         Arrays.fill(visited, 0, pixelCount, false)
 
         val areaFraction = if (lenient) LENIENT_MIN_AREA_FRACTION else MIN_AREA_FRACTION
@@ -108,7 +152,9 @@ internal class RectangleDetector {
             // The enclosing rectangle is only a coarse answer: a perspective view of
             // a rectangle is a trapezoid, so forcing a rectangle overshoots the real
             // outline and biases the corners. Refine to a general quad.
-            val quad = refineQuad(hull, rect) ?: rect
+            val fittedQuad = refineQuad(hull, rect)
+            val simplifiedQuad = if (fittedQuad == null) simplifyHullToQuad(hull) else null
+            val quad = fittedQuad ?: simplifiedQuad ?: rect
             val fullResolutionQuad = FloatArray(quad.size) { index ->
                 quad[index] * step.toFloat()
             }
@@ -118,7 +164,7 @@ internal class RectangleDetector {
             // to [step] source pixels. Once we know where the board is, a tiny
             // full-resolution search along its four sides recovers the actual luma
             // transition without paying the cost of full-resolution blob labelling.
-            val sourceRefinedQuad = refineAtSourceResolution(
+            val refinedFromEdges = refineAtSourceResolution(
                 luma = luma,
                 width = width,
                 height = height,
@@ -126,11 +172,25 @@ internal class RectangleDetector {
                 threshold = threshold,
                 coarseQuad = fullResolutionQuad,
                 step = step,
-            ) ?: fullResolutionQuad
-            candidates += Candidate(sourceRefinedQuad, polygonArea(sourceRefinedQuad), step)
+            ) ?: if (simplifiedQuad != null && step > 1) {
+                // Shadows can remove a true corner from the thresholded hull.
+                // If the simplified outline has no supporting source-image edges,
+                // retry the rectangle seed: its boundary may still be close enough
+                // to recover all four real edges. Never commit unsupported taper.
+                val rectangleSeed = FloatArray(8) { rect[it] * step }
+                refineAtSourceResolution(luma, width, height, rowStride, threshold,
+                    rectangleSeed, step)
+            } else null
+            val hasMeasuredCorners = refinedFromEdges != null || fittedQuad != null ||
+                (step == 1 && simplifiedQuad != null)
+            val sourceRefinedQuad = refinedFromEdges ?: if (simplifiedQuad != null && step > 1) {
+                FloatArray(8) { rect[it] * step }
+            } else fullResolutionQuad
+            candidates += Candidate(sourceRefinedQuad, polygonArea(sourceRefinedQuad), step,
+                minAreaRect(sourceRefinedQuad) ?: fullResolutionQuad, hasMeasuredCorners)
         }
 
-        return candidates.sortedByDescending { it.areaPx }.take(MAX_CANDIDATES)
+        return candidates.sortedByDescending { it.areaPx }
     }
 
     private fun ensureCapacity(pixelCount: Int) {
@@ -329,6 +389,38 @@ internal class RectangleDetector {
             }
         }
         return best
+    }
+
+    /**
+     * A sloping raster edge may contribute only its endpoints to the convex hull.
+     * Then the four independent line fits have too few samples, even though the
+     * hull still contains an excellent perspective outline. Remove the least
+     * significant hull vertices (distance to the adjacent chord) until four remain,
+     * rather than replacing that hull with its enclosing rectangle. Chord distance
+     * preserves corners on sparsely sampled sloping edges better than triangle area.
+     * Source-resolution edge
+     * refinement below removes the remaining pixel-grid error.
+     */
+    private fun simplifyHullToQuad(hull: FloatArray): FloatArray? {
+        val vertices = (0 until hull.size / 2).toMutableList()
+        if (vertices.size < 4) return null
+        while (vertices.size > 4) {
+            val remove = vertices.indices.minByOrNull { i ->
+                val a = vertices[(i + vertices.size - 1) % vertices.size] * 2
+                val b = vertices[i] * 2
+                val c = vertices[(i + 1) % vertices.size] * 2
+                abs((hull[b] - hull[a]) * (hull[c + 1] - hull[a + 1]) -
+                    (hull[b + 1] - hull[a + 1]) * (hull[c] - hull[a])) /
+                    kotlin.math.hypot(hull[c] - hull[a], hull[c + 1] - hull[a + 1]).coerceAtLeast(1e-6f)
+            } ?: return null
+            vertices.removeAt(remove)
+        }
+        val quad = FloatArray(8) { hull[vertices[it / 2] * 2 + it % 2] }
+        if (!isConvex(quad)) return null
+        // A four-point approximation must still account for almost all of the
+        // measured silhouette, not invent a board inside a rounded/irregular blob.
+        if (polygonArea(quad) < polygonArea(hull) * 0.9f) return null
+        return quad
     }
 
     /**

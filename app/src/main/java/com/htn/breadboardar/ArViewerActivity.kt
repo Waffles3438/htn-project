@@ -145,6 +145,7 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
 
     override fun onArError(message: String) {
         pendingCalibrationTap = null
+        overlay.clearSelectedRectangle()
         showStatus(message)
     }
 
@@ -158,7 +159,7 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
     }
 
     override fun onBoardOutline(outline: List<PointF>) {
-        overlay.showBoardOutline(outline)
+        overlay.showBoardOutline(outline, smoothDetection = false)
     }
 
     override fun onCandidateRectangles(rectangles: List<List<PointF>>) {
@@ -174,20 +175,21 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
         showStatus("Working out the board position, hold the phone steady.")
     }
 
-    override fun onBoardTracked(reprojectionErrorPx: Float) {
+    override fun onBoardTracked(reprojectionErrorPx: Float, boardWidthMeters: Float) {
+        nativeBreadboardRenderer.setPhysicalBoardWidth(boardWidthMeters)
         overlay.clearSelectedRectangle()
+        overlay.endCalibration()
         boardFitPx = reprojectionErrorPx.toInt()
-        showStatus("Board locked (fit ${boardFitPx}px). Keep the whole board in view.")
+        showStatus("Board tracked. Move slowly around it to view the model in 3D; keep the board visible.")
     }
 
     override fun onBoardVisibility(visible: Boolean) {
         if (!visible) nativeBreadboardRenderer.hide()
         showStatus(
             if (visible) {
-                "Board locked (fit ${boardFitPx}px). Keep the whole board in view."
+                "Board tracked. Move slowly around it to view the model in 3D; keep the board visible."
             } else {
-                "Board out of view. The overlay is hidden rather than left at a stale position. " +
-                    "Bring the whole board back into frame."
+                "Looking for the board again. Bring its full outline into view; tracking resumes automatically."
             },
         )
     }
@@ -263,7 +265,7 @@ class ArViewerActivity : AppCompatActivity(), ArCameraPreview.Listener, GlbModel
         preview.setCalibrationActive(true)
         preview.setRectangleDetectionActive(true)
         overlay.beginCalibration()
-        showStatus("Tap the outlined rectangle that is your breadboard.")
+        showStatus("Start above the board. Tap its rectangular outline; after calibration it follows perspective.")
     }
 
     private fun resetCalibration(message: String) {
