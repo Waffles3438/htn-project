@@ -30,6 +30,10 @@ public class objectPlacer : MonoBehaviour
     [Header("References")]
     public GridMapper gridMapper;
 
+    [Header("Placement Settings")]
+    [Tooltip("How far down (in Unity meters) to sink the components into the breadboard.")]
+    public float insertionDepth = 0.005f; 
+
     [Header("Component Catalog")]
     public List<ComponentDefinition> catalogDefinitions = new List<ComponentDefinition>();
     private Dictionary<string, ComponentDefinition> _catalogDictionary;
@@ -38,16 +42,14 @@ public class objectPlacer : MonoBehaviour
     public void AutoGenerateCatalog()
     {
         catalogDefinitions.Clear();
-
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Capacitor", orderedLocalPins = new List<string> { "Pin1", "Pin2" } });
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Diode", orderedLocalPins = new List<string> { "Pin1", "Pin2" } });
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Led", orderedLocalPins = new List<string> { "Pin1", "Pin2" } });
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "MOSFET", orderedLocalPins = new List<string> { "Pin1", "Pin2", "Pin3" } });
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Pushbutton", orderedLocalPins = new List<string> { "Pin1", "Pin2", "Pin3", "Pin4" } });
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Resistor", orderedLocalPins = new List<string> { "Pin1", "Pin2" } });
-        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Thermistor", orderedLocalPins = new List<string> { "Pin1", "Pin2" } });
-
-        Debug.Log("[objectPlacer] Generated 7 catalog slots! Now drag your 3D models into the empty 'Prefab' slots in the Inspector.");
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Capacitor", orderedLocalPins = new List<string> { "Cathode", "Anode" } });
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Diode", orderedLocalPins = new List<string> { "Cathode", "Anode" } });
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Led", orderedLocalPins = new List<string> { "Cathode", "Anode" } });
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "MOSFET", orderedLocalPins = new List<string> { "Base", "Collector", "Emitter" } });
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Pushbutton", orderedLocalPins = new List<string> { "Cathode", "Anode", "Output" } });
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Resistor", orderedLocalPins = new List<string> { "Cathode", "Anode" } });
+        catalogDefinitions.Add(new ComponentDefinition { typeKey = "Thermistor", orderedLocalPins = new List<string> { "Cathode", "Anode" } });
+        Debug.Log("[objectPlacer] Generated custom 7 catalog slots using Cathode/Anode and 3-pin Pushbutton.");
     }
 
     private void Awake()
@@ -60,12 +62,9 @@ public class objectPlacer : MonoBehaviour
         _catalogDictionary = new Dictionary<string, ComponentDefinition>();
         foreach (var def in catalogDefinitions)
         {
-            if (!string.IsNullOrEmpty(def.typeKey) && def.prefab != null)
+            if (!string.IsNullOrEmpty(def.typeKey) && def.prefab != null && !_catalogDictionary.ContainsKey(def.typeKey))
             {
-                if (!_catalogDictionary.ContainsKey(def.typeKey))
-                {
-                    _catalogDictionary.Add(def.typeKey, def);
-                }
+                _catalogDictionary.Add(def.typeKey, def);
             }
         }
     }
@@ -75,33 +74,19 @@ public class objectPlacer : MonoBehaviour
         List<AssemblyStep> steps = new List<AssemblyStep>();
         if (_catalogDictionary == null || _catalogDictionary.Count == 0) BuildCatalog();
 
-        if (!_catalogDictionary.TryGetValue(typeKey, out var def))
-        {
-            Debug.LogError($"[objectPlacer] Catalog missing typeKey '{typeKey}'");
-            return steps;
-        }
-
-        if (def.orderedLocalPins == null || def.orderedLocalPins.Count != gridPins.Count)
-        {
-            Debug.LogError($"[objectPlacer] Pin count mismatch for '{typeKey}'. Expected {def.orderedLocalPins?.Count ?? 0}, got {gridPins.Count}");
-            return steps;
-        }
+        if (!_catalogDictionary.TryGetValue(typeKey, out var def)) return steps;
+        if (def.orderedLocalPins == null || def.orderedLocalPins.Count != gridPins.Count) return steps;
 
         for (int i = 0; i < def.orderedLocalPins.Count; i++)
         {
-            string localPin = def.orderedLocalPins[i];
             string gridPin = gridPins[i];
-            Vector3 worldPos = gridMapper != null ? gridMapper.GetPinWorldPosition(gridPin) : Vector3.zero;
-
             steps.Add(new AssemblyStep
             {
-                localPinName = localPin,
+                localPinName = def.orderedLocalPins[i],
                 targetGridPin = gridPin,
-                worldPosition = worldPos,
-                commandText = $"Step {i + 1} ({typeKey}): Place [{localPin}] into slot [{gridPin}]"
+                worldPosition = gridMapper != null ? gridMapper.GetPinWorldPosition(gridPin) : Vector3.zero,
             });
         }
-
         return steps;
     }
 
@@ -110,19 +95,8 @@ public class objectPlacer : MonoBehaviour
         var steps = GeneratePinAssemblySteps(typeKey, gridPins);
         if (steps.Count == 0) return null;
 
-        if (logPerPinCommands)
-        {
-            foreach (var step in steps)
-            {
-                Debug.Log($"[Assembly Guide] {step.commandText} at WorldPos {step.worldPosition:F3}");
-            }
-        }
-
         List<PinMapping> mappings = new List<PinMapping>();
-        foreach (var s in steps)
-        {
-            mappings.Add(new PinMapping { localPinName = s.localPinName, gridPin = s.targetGridPin });
-        }
+        foreach (var s in steps) mappings.Add(new PinMapping { localPinName = s.localPinName, gridPin = s.targetGridPin });
 
         if (!_catalogDictionary.TryGetValue(typeKey, out var def) || def.prefab == null) return null;
 
@@ -134,50 +108,57 @@ public class objectPlacer : MonoBehaviour
     private void ApplyNamedPinAlignment(GameObject obj, List<PinMapping> mappings)
     {
         if (gridMapper == null || mappings == null || mappings.Count == 0) return;
-        
         Transform GetPin(string name) => FindPinRecursive(obj.transform, name);
+
+        obj.transform.rotation = Quaternion.identity;
 
         if (mappings.Count == 1)
         {
             Transform t = GetPin(mappings[0].localPinName);
             Vector3 target = gridMapper.GetPinWorldPosition(mappings[0].gridPin);
-            obj.transform.rotation = Quaternion.identity;
             obj.transform.position += (t != null) ? (target - t.position) : target;
+            obj.transform.position -= Vector3.up * insertionDepth;
             return;
         }
 
+        // FIX: Always use the FIRST and LAST pin in the list to calculate the rotation vector.
+        // This ignores staggered middle pins (like the MOSFET Collector) preventing twisting.
         Transform t1 = GetPin(mappings[0].localPinName);
-        Transform t2 = GetPin(mappings[1].localPinName);
+        Transform t2 = GetPin(mappings[mappings.Count - 1].localPinName);
         Vector3 target1 = gridMapper.GetPinWorldPosition(mappings[0].gridPin);
-        Vector3 target2 = gridMapper.GetPinWorldPosition(mappings[1].gridPin);
+        Vector3 target2 = gridMapper.GetPinWorldPosition(mappings[mappings.Count - 1].gridPin);
 
         if (t1 != null && t2 != null)
         {
-            Vector3 localDirWorld = obj.transform.TransformDirection(t2.localPosition - t1.localPosition);
-            Vector3 worldDir = target2 - target1;
+            Vector3 currentDir = t2.position - t1.position;
+            Vector3 targetDir = target2 - target1;
 
-            if (localDirWorld.sqrMagnitude > 1e-6f && worldDir.sqrMagnitude > 1e-6f)
+            currentDir.y = 0;
+            targetDir.y = 0;
+
+            if (currentDir.sqrMagnitude > 1e-6f && targetDir.sqrMagnitude > 1e-6f)
             {
-                Quaternion rotDelta = Quaternion.FromToRotation(localDirWorld, worldDir);
-                obj.transform.rotation = rotDelta * obj.transform.rotation;
+                float angle = Vector3.SignedAngle(currentDir, targetDir, Vector3.up);
+                obj.transform.Rotate(0, angle, 0, Space.World);
             }
             
+            // Re-calculate t1 position since spinning shifts it
             obj.transform.position += (target1 - t1.position);
         }
         else
         {
-            Debug.LogWarning($"[objectPlacer] Missing named pin(s) on prefab {obj.name}. Falling back to midpoint.");
             obj.transform.position = (target1 + target2) * 0.5f;
         }
+
+        // FIX: Translate down into the breadboard
+        obj.transform.position -= Vector3.up * insertionDepth;
     }
 
     private Transform FindPinRecursive(Transform parent, string pinName)
     {
         foreach (Transform child in parent)
         {
-            if (string.Equals(child.name, pinName, System.StringComparison.OrdinalIgnoreCase))
-                return child;
-            
+            if (string.Equals(child.name, pinName, System.StringComparison.OrdinalIgnoreCase)) return child;
             Transform nested = FindPinRecursive(child, pinName);
             if (nested != null) return nested;
         }
